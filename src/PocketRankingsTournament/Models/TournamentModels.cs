@@ -97,7 +97,10 @@ public sealed record TournamentEvent(
     IReadOnlyList<Competition> Competitions,
     IReadOnlyList<PayoutDisplay> Payouts);
 
-public sealed record TournamentDirectoryViewModel(IReadOnlyList<TournamentEvent> Active, IReadOnlyList<TournamentEvent> Upcoming);
+public sealed record TournamentDirectoryViewModel(
+    IReadOnlyList<TournamentEvent> Active,
+    IReadOnlyList<TournamentEvent> Upcoming,
+    IReadOnlyList<TournamentEvent> History);
 
 public sealed record TournamentDetailViewModel(TournamentEvent Event, Competition Competition);
 

@@ -3,12 +3,12 @@ using PocketRankingsTournament.Services;
 
 namespace PocketRankingsTournament.Tests;
 
-public sealed class TournamentCatalogTests
+public sealed class TournamentStoreTests
 {
     [Fact]
-    public void DirectorySeparatesLiveAndRegistrationEvents()
+    public async Task DirectorySeparatesLiveAndRegistrationEvents()
     {
-        var directory = new TournamentCatalog(new BracketBuilder()).GetDirectory();
+        var directory = await new DevelopmentTournamentStore(new BracketBuilder()).GetDirectoryAsync();
 
         Assert.Single(directory.Active);
         Assert.Single(directory.Upcoming);

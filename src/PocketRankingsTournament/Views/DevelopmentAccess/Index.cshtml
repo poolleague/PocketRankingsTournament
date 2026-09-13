@@ -1,0 +1,28 @@
+@{
+    ViewData["Title"] = "Development access";
+}
+<section class="empty-page">
+    <p class="eyebrow">Fictional local identities</p>
+    <h1>Choose a role to test.</h1>
+    <p class="lede">This page exists only in Development. Production has no local sign-in route and remains closed until the separately approved Account contract is available.</p>
+    <div class="role-grid">
+        <form method="post" action="/development/access">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="role" value="owner" />
+            <h2>Owner</h2><p>Full installation, tournament, and organizer-access administration.</p>
+            <button class="button" type="submit">Continue as owner</button>
+        </form>
+        <form method="post" action="/development/access">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="role" value="tournament_director" />
+            <h2>Tournament director</h2><p>Create tournaments and operate assigned events.</p>
+            <button class="button" type="submit">Continue as director</button>
+        </form>
+        <form method="post" action="/development/access">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="role" value="scorekeeper" />
+            <h2>Scorekeeper</h2><p>View operations and record assigned match results only.</p>
+            <button class="button" type="submit">Continue as scorekeeper</button>
+        </form>
+    </div>
+</section>

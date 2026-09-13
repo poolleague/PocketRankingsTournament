@@ -1,3 +1,4 @@
+@inject IWebHostEnvironment HostEnvironment
 @{
     var controller = ViewContext.RouteData.Values["controller"]?.ToString();
 }
@@ -24,9 +25,35 @@
                 <a class="@(controller == "Tournaments" ? "active" : null)" aria-current="@(controller == "Tournaments" ? "page" : null)" href="/tournaments">Tournaments</a>
                 <a href="/tournaments#upcoming">Upcoming</a>
                 <a href="/tournaments#formats">Formats</a>
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    <h2>Operations</h2>
+                    <a class="@(controller == "Organizer" ? "active" : null)" aria-current="@(controller == "Organizer" ? "page" : null)" href="/organizer">Organizer</a>
+                    @if (User.IsInRole("owner"))
+                    {
+                        <a href="/organizer/access">Access</a>
+                    }
+                }
+                else if (HostEnvironment.IsDevelopment())
+                {
+                    <a href="/development/access">Development access</a>
+                }
                 <a href="/Home/Privacy">Privacy</a>
             </nav>
-            <p class="family-note">Local competition, made easier.</p>
+            <div class="family-note">
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    <span>@User.Identity.Name</span>
+                    <form method="post" action="/sign-out">
+                        @Html.AntiForgeryToken()
+                        <button class="link-button" type="submit">Sign out</button>
+                    </form>
+                }
+                else
+                {
+                    <span>Local competition, made easier.</span>
+                }
+            </div>
         </aside>
         <div class="main-column">
             <label class="nav-scrim" for="nav-toggle" aria-hidden="true"></label>

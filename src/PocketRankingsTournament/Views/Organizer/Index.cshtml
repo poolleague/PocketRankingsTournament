@@ -1,0 +1,32 @@
+@model OrganizerDashboardViewModel
+@{
+    ViewData["Title"] = "Tournament operations";
+}
+<section class="admin-heading">
+    <div><p class="eyebrow">Organizer workspace</p><h1>Tournament operations</h1><p>Move each event from setup through a retained historical record.</p></div>
+    @if (User.IsInRole("owner") || User.IsInRole("tournament_director"))
+    {
+        <a class="button" href="/organizer/tournaments/new">Create tournament</a>
+    }
+</section>
+@if (TempData["Notice"] is string notice) { <div class="notice success" role="status">@notice</div> }
+<section class="page-section">
+    <div class="section-heading"><div><p class="eyebrow">Current work</p><h2>Active tournaments</h2></div><span class="count-pill">@Model.Active.Count</span></div>
+    <div class="admin-list">
+        @foreach (var tournament in Model.Active)
+        {
+            <a href="/organizer/tournaments/@tournament.Id"><span><strong>@tournament.Name</strong><small>@tournament.Venue · @tournament.StartsAt.ToString("ddd, MMM d · h:mm tt")</small></span><span class="status">@TournamentLabels.Status(tournament.Status)</span></a>
+        }
+        @if (Model.Active.Count == 0) { <p class="empty-row">No active tournaments.</p> }
+    </div>
+</section>
+<section class="page-section">
+    <div class="section-heading"><div><p class="eyebrow">Retained records</p><h2>History</h2></div><span class="count-pill">@Model.History.Count</span></div>
+    <div class="admin-list">
+        @foreach (var tournament in Model.History)
+        {
+            <a href="/organizer/tournaments/@tournament.Id"><span><strong>@tournament.Name</strong><small>@tournament.Venue · @tournament.StartsAt.ToString("MMM d, yyyy")</small></span><span class="status">@TournamentLabels.Status(tournament.Status)</span></a>
+        }
+        @if (Model.History.Count == 0) { <p class="empty-row">Completed and archived tournaments will remain available here.</p> }
+    </div>
+</section>

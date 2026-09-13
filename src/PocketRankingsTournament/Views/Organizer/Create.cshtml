@@ -1,0 +1,21 @@
+@model CreateTournamentInput
+@{
+    ViewData["Title"] = "Create tournament";
+}
+<section class="form-page">
+    <a class="back-link" href="/organizer">← Operations</a>
+    <p class="eyebrow">Private draft</p><h1>Create a tournament</h1>
+    <p class="lede">Start with the event basics. Registration and the public page stay closed until you deliberately open them.</p>
+    <form method="post" class="form-card">
+        <div asp-validation-summary="ModelOnly" class="validation" role="alert"></div>
+        <label asp-for="Name">Tournament name</label><input asp-for="Name" autocomplete="off" /><span asp-validation-for="Name" class="validation"></span>
+        <div class="form-grid">
+            <div><label asp-for="Venue">Venue</label><input asp-for="Venue" autocomplete="organization" /><span asp-validation-for="Venue" class="validation"></span></div>
+            <div><label asp-for="Locality">City or locality</label><input asp-for="Locality" autocomplete="address-level2" /><span asp-validation-for="Locality" class="validation"></span></div>
+        </div>
+        <label asp-for="StartsAtLocal">Starts</label><input asp-for="StartsAtLocal" type="datetime-local" /><span asp-validation-for="StartsAtLocal" class="validation"></span>
+        <label asp-for="Description">Public description</label><textarea asp-for="Description" rows="4"></textarea><span asp-validation-for="Description" class="validation"></span>
+        <input asp-for="TimeZoneId" type="hidden" />
+        <div class="form-actions"><a href="/organizer">Cancel</a><button class="button" type="submit">Create private draft</button></div>
+    </form>
+</section>

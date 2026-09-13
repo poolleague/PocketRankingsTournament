@@ -1,0 +1,49 @@
+@model OrganizerTournamentViewModel
+@{
+    ViewData["Title"] = Model.Event.Name;
+}
+<section class="admin-heading">
+    <div><a class="back-link" href="/organizer">← Operations</a><p class="eyebrow">@TournamentLabels.Status(Model.Event.Status)</p><h1>@Model.Event.Name</h1><p>@Model.Event.Venue · @Model.Event.Locality · @Model.Event.StartsAt.ToString("dddd, MMMM d 'at' h:mm tt")</p></div>
+    <a class="secondary-button" href="/tournaments/@Model.Event.Id">Public view</a>
+</section>
+@if (TempData["Notice"] is string notice) { <div class="notice success" role="status">@notice</div> }
+@if (TempData["Error"] is string error) { <div class="notice error" role="alert">@error</div> }
+<div class="operations-grid">
+    <section class="panel">
+        <p class="eyebrow">Next action</p><h2>Lifecycle</h2>
+        @if (Model.AvailableTransitions.Count > 0 && (User.IsInRole("owner") || User.IsInRole("tournament_director")))
+        {
+            @foreach (var next in Model.AvailableTransitions)
+            {
+                <form method="post" action="/organizer/tournaments/@Model.Event.Id/status" class="transition-form">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="ToStatus" value="@next" />
+                    <label for="reason-@next">Reason for moving to @TournamentLabels.Status(next)</label>
+                    <input id="reason-@next" name="Reason" required minlength="3" maxlength="500" />
+                    <button class="button" type="submit">Move to @TournamentLabels.Status(next)</button>
+                </form>
+            }
+        }
+        else if (Model.Event.Status == TournamentStatus.Archived) { <p>This tournament is retained in history and cannot move backward.</p> }
+        else { <p>Your role can view this workflow but cannot change tournament status.</p> }
+    </section>
+    <section class="panel">
+        <p class="eyebrow">Recorded evidence</p><h2>Status history</h2>
+        <ol class="timeline">
+            @foreach (var change in Model.StatusHistory)
+            {
+                <li><strong>@TournamentLabels.Status(change.FromStatus) → @TournamentLabels.Status(change.ToStatus)</strong><span>@change.OccurredAt.ToLocalTime().ToString("g") · @change.ActorName</span><p>@change.Reason</p></li>
+            }
+        </ol>
+        @if (Model.StatusHistory.Count == 0) { <p class="empty-row">No status changes have been recorded yet.</p> }
+    </section>
+</div>
+<section class="panel page-section">
+    <p class="eyebrow">Append-only record</p><h2>Audit trail</h2>
+    <div class="audit-table" role="table" aria-label="Tournament audit trail">
+        @foreach (var entry in Model.AuditEntries)
+        {
+            <div role="row"><span role="cell">@entry.OccurredAt.ToLocalTime().ToString("g")</span><strong role="cell">@entry.Action.Replace('_', ' ')</strong><span role="cell">@entry.ActorName (@entry.ActorRole.Replace('_', ' '))</span><span role="cell">@entry.Reason</span></div>
+        }
+    </div>
+</section>

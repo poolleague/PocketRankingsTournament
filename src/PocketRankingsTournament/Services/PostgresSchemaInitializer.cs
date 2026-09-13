@@ -19,14 +19,21 @@ public sealed class PostgresSchemaInitializer : IHostedService
         _logger = logger;
     }
 
+    // Applies every checked-in contract in stable order before any request can use a partially upgraded database.
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        var path = Path.Combine(_environment.ContentRootPath, "Database", "001_initial_schema.sql");
-        var sql = await File.ReadAllTextAsync(path, cancellationToken);
-        await using var command = _dataSource.CreateCommand(sql);
-        await command.ExecuteNonQueryAsync(cancellationToken);
-        _logger.LogInformation("Tournament PostgreSQL schema contract is ready");
+        var databasePath = Path.Combine(_environment.ContentRootPath, "Database");
+        var migrationPaths = Directory.GetFiles(databasePath, "*.sql").OrderBy(path => path, StringComparer.Ordinal).ToArray();
+        foreach (var path in migrationPaths)
+        {
+            // Checked-in migrations are idempotent and ordered by filename so a new client can safely initialize from zero.
+            var sql = await File.ReadAllTextAsync(path, cancellationToken);
+            await using var command = _dataSource.CreateCommand(sql);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        _logger.LogInformation("Tournament PostgreSQL schema contract is ready at {MigrationCount} migrations", migrationPaths.Length);
     }
 
+    // The initializer owns no background work after startup, so shutdown intentionally has nothing to drain.
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

@@ -15,7 +15,11 @@ Matches `PoolLeagueWeb`'s layout: the actual project lives under
 
 ## Status
 
-The initial application foundation is under active development on
-`codex/tournament-foundation`. See `AGENTS.md` for repo-specific rules,
+The application now includes a public tournament surface plus a Tournament-local
+administration and retained-history foundation on `codex/tournament-foundation`.
+Development provides fictional Owner, Tournament Director, and Scorekeeper
+identities for permission testing. Production administration deliberately fails
+closed until the separate Account identity handoff receives approval; this repo
+does not implement or store passwords. See `AGENTS.md` for repo-specific rules,
 `docs/CURRENT_RELEASE_HANDOFF.md` for current state, and
 `docs/COMPETITIVE_RECON.md` for the product research behind the roadmap.

@@ -6,23 +6,25 @@ namespace PocketRankingsTournament.Controllers;
 
 public sealed class TournamentsController : Controller
 {
-    private readonly ITournamentCatalog _catalog;
+    private readonly ITournamentStore _store;
 
     // Keeps the public read surface independent from future authenticated organizer workflows.
-    public TournamentsController(ITournamentCatalog catalog)
+    public TournamentsController(ITournamentStore store)
     {
-        _catalog = catalog;
+        _store = store;
     }
 
     [HttpGet("/")]
     [HttpGet("/tournaments")]
-    public IActionResult Index() => View(_catalog.GetDirectory());
+    public async Task<IActionResult> Index(CancellationToken cancellationToken) =>
+        View(await _store.GetDirectoryAsync(cancellationToken));
 
     [HttpGet("/tournaments/{id:guid}")]
-    public IActionResult Details(Guid id, Guid? competitionId = null)
+    public async Task<IActionResult> Details(Guid id, Guid? competitionId = null, CancellationToken cancellationToken = default)
     {
-        var tournament = _catalog.Find(id);
-        if (tournament is null)
+        var tournament = await _store.FindAsync(id, cancellationToken);
+        // Private drafts and archived operational records must never become public through a guessed UUID.
+        if (tournament is null || tournament.Status is TournamentStatus.Draft or TournamentStatus.Archived)
         {
             return NotFound();
         }

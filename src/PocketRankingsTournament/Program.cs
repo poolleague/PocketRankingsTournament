@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Npgsql;
+using PocketRankingsTournament.Security;
 using PocketRankingsTournament.Services;
 
 namespace PocketRankingsTournament;
@@ -10,8 +12,35 @@ public class Program
         var builder = WebApplication.CreateBuilder(args);
 
         builder.Services.AddControllersWithViews();
+        builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+            .AddCookie(options =>
+            {
+                options.Cookie.Name = builder.Environment.IsDevelopment()
+                    ? "PocketRankingsTournament.Development"
+                    : "__Host-PocketRankingsTournament";
+                options.Cookie.HttpOnly = true;
+                options.Cookie.SameSite = SameSiteMode.Lax;
+                options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+                    ? CookieSecurePolicy.SameAsRequest
+                    : CookieSecurePolicy.Always;
+                options.ExpireTimeSpan = TimeSpan.FromHours(8);
+                options.SlidingExpiration = false;
+                options.LoginPath = builder.Environment.IsDevelopment() ? "/development/access" : "/account-required";
+                options.AccessDeniedPath = "/access-denied";
+            });
+        builder.Services.AddAntiforgery(options =>
+        {
+            options.Cookie.Name = builder.Environment.IsDevelopment()
+                ? "PocketRankingsTournament.Development.CSRF"
+                : "__Host-PocketRankingsTournament-CSRF";
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = SameSiteMode.Strict;
+            options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+                ? CookieSecurePolicy.SameAsRequest
+                : CookieSecurePolicy.Always;
+        });
+        builder.Services.AddAuthorization(options => TournamentAuthorization.Configure(options));
         builder.Services.AddSingleton<BracketBuilder>();
-        builder.Services.AddSingleton<ITournamentCatalog, TournamentCatalog>();
 
         var connectionString = builder.Configuration.GetConnectionString("TournamentDatabase");
         if (!string.IsNullOrWhiteSpace(connectionString))
@@ -19,6 +48,12 @@ public class Program
             // One data source owns the connection pool; repositories must not create per-request pools.
             builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
             builder.Services.AddHostedService<PostgresSchemaInitializer>();
+            builder.Services.AddScoped<ITournamentStore, PostgresTournamentStore>();
+        }
+        else
+        {
+            // The fictional store keeps local design and automated work usable without pretending to be Production persistence.
+            builder.Services.AddSingleton<ITournamentStore, DevelopmentTournamentStore>();
         }
 
         var app = builder.Build();
@@ -34,8 +69,18 @@ public class Program
         }
         app.UseStaticFiles();
 
+        app.Use(async (context, next) =>
+        {
+            // These headers keep organizer data out of embedding/referrer channels without weakening the public bracket surface.
+            context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+            context.Response.Headers["Referrer-Policy"] = "no-referrer";
+            context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'";
+            await next();
+        });
+
         app.UseRouting();
 
+        app.UseAuthentication();
         app.UseAuthorization();
 
         app.MapControllerRoute(

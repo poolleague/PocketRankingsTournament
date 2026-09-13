@@ -27,4 +27,29 @@ public sealed class SchemaContractTests
         var participantBlock = sql[participantOffset..linkOffset];
         Assert.DoesNotContain("person_uuid", participantBlock, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void AdministrationMigrationRetainsRolesDrawsResultsAndLifecycleHistory()
+    {
+        var sql = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Database", "002_administration_history.sql"));
+
+        Assert.StartsWith("BEGIN;", sql.TrimStart(), StringComparison.Ordinal);
+        Assert.EndsWith("COMMIT;", sql.TrimEnd(), StringComparison.Ordinal);
+        Assert.Contains("core.local_accounts", sql, StringComparison.Ordinal);
+        Assert.Contains("core.account_roles", sql, StringComparison.Ordinal);
+        Assert.Contains("tourn.event_role_assignments", sql, StringComparison.Ordinal);
+        Assert.Contains("tourn.event_status_history", sql, StringComparison.Ordinal);
+        Assert.Contains("tourn.draw_revisions", sql, StringComparison.Ordinal);
+        Assert.Contains("tourn.match_result_revisions", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("league.", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AuditMutationIsRejectedAtTheDatabaseBoundary()
+    {
+        var sql = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Database", "002_administration_history.sql"));
+
+        Assert.Contains("BEFORE UPDATE OR DELETE ON audit.entries", sql, StringComparison.Ordinal);
+        Assert.Contains("Tournament audit entries are append-only", sql, StringComparison.Ordinal);
+    }
 }
