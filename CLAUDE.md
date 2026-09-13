@@ -1,8 +1,9 @@
-# AGENTS.md — PocketRankingsTournament
+# CLAUDE.md — PocketRankingsTournament (Claude Code)
 
 This repo inherits every rule in `PLATFORM_AGENTS.md`
 (`PocketRankingsPlatform` repo). This file covers only what's specific to
-Tournament. The owner approved the shared rules on 2026-09-13.
+Tournament, and is kept word-for-word identical to `AGENTS.md` below this
+line. The owner approved the shared rules on 2026-09-13.
 
 ## Scope of this product
 

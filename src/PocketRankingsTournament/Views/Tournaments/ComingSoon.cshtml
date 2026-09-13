@@ -1,0 +1,3 @@
+@model TournamentEvent
+@{ ViewData["Title"] = Model.Name; }
+<section class="empty-page"><a class="back-link" href="/tournaments">← All tournaments</a><p class="eyebrow">@TournamentLabels.Status(Model.Status)</p><h1>@Model.Name</h1><p>@Model.Venue · @Model.Locality · @Model.StartsAt.ToString("dddd, MMMM d 'at' h:mm tt")</p><div class="empty-card"><h2>The draw has not been published yet.</h2><p>Check back after registration and check-in close.</p></div></section>

@@ -4,9 +4,9 @@ Tournament product for the Pocket Rankings platform: brackets, matches,
 and results, isolated from League per
 `PocketRankingsPlatform/PLATFORM_AGENTS.md` Section 1.
 
-References League players/teams via the identity/entitlement contract in
-PLATFORM_AGENTS.md Section 2 — never by querying League's database
-directly.
+Keeps its own local participants and optionally links a person through the
+Account-owned `PersonId` contract. It never references League teams or queries
+another product's database.
 
 ## Structure
 
@@ -15,5 +15,7 @@ Matches `PoolLeagueWeb`'s layout: the actual project lives under
 
 ## Status
 
-Scaffolding only — no runtime code yet. See `AGENTS.md` for repo-specific
-rules; platform-wide rules live in `PocketRankingsPlatform`.
+The initial application foundation is under active development on
+`codex/tournament-foundation`. See `AGENTS.md` for repo-specific rules,
+`docs/CURRENT_RELEASE_HANDOFF.md` for current state, and
+`docs/COMPETITIVE_RECON.md` for the product research behind the roadmap.

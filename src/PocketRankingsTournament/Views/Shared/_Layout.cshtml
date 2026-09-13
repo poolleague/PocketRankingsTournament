@@ -1,0 +1,47 @@
+@{
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString();
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#244c45" />
+    <title>@ViewData["Title"] · Pocket Rankings Tournament</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <input class="nav-toggle" type="checkbox" id="nav-toggle" aria-label="Toggle main menu" />
+    <div class="app-shell">
+        <aside class="side-nav">
+            <a class="side-brand" href="/">
+                <span class="brand-mark" aria-hidden="true">8</span>
+                <span><strong>PocketRankings.com</strong><small>Tournament</small></span>
+            </a>
+            <nav id="main-menu" aria-label="Main menu">
+                <h2>Tournament</h2>
+                <a class="@(controller == "Tournaments" ? "active" : null)" aria-current="@(controller == "Tournaments" ? "page" : null)" href="/tournaments">Tournaments</a>
+                <a href="/tournaments#upcoming">Upcoming</a>
+                <a href="/tournaments#formats">Formats</a>
+                <a href="/Home/Privacy">Privacy</a>
+            </nav>
+            <p class="family-note">Local competition, made easier.</p>
+        </aside>
+        <div class="main-column">
+            <label class="nav-scrim" for="nav-toggle" aria-hidden="true"></label>
+            <header class="mobile-topbar">
+                <label for="nav-toggle" aria-controls="main-menu">Menu</label>
+                <strong>Tournament</strong>
+                <a href="/tournaments">Events</a>
+            </header>
+            <main id="main-content">@RenderBody()</main>
+            <footer class="site-footer">
+                <strong>Pocket Rankings Tournament</strong>
+                <span>Built for local pool communities.</span>
+            </footer>
+        </div>
+    </div>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

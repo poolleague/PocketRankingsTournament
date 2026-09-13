@@ -1,6 +1,10 @@
 ## .NET
 bin/
 obj/
+.env
+*.user
+*.suo
+TestResults/
 *.user
 *.suo
 .vs/
