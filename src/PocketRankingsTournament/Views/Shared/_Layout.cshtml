@@ -25,6 +25,7 @@
                 <a class="@(controller == "Tournaments" ? "active" : null)" aria-current="@(controller == "Tournaments" ? "page" : null)" href="/tournaments">Tournaments</a>
                 <a href="/tournaments#upcoming">Upcoming</a>
                 <a href="/tournaments#formats">Formats</a>
+                <a class="@(controller == "Help" ? "active" : null)" aria-current="@(controller == "Help" ? "page" : null)" href="/help">Help</a>
                 @if (User.Identity?.IsAuthenticated == true)
                 {
                     <h2>Operations</h2>
@@ -69,6 +70,7 @@
             </footer>
         </div>
     </div>
+    <script src="~/js/site.js" asp-append-version="true" defer></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.0 — Unreleased
+
+- Added single-cycle round-robin scheduling for even and odd fields with live,
+  deterministic standings and CSV export.
+- Added ready/called/in-progress floor controls, assigned-table requirements,
+  and prevention of concurrent active matches on one physical table.
+- Corrected larger-field double-elimination loser routing, propagated odd-field
+  byes through resolved paths, and activated the if-needed final only when the
+  elimination-side finalist wins the first championship match.
+- Added director-confirmed winner reversals that reset only dependent later
+  matches, retain superseded result versions, and invalidate stale score forms.
+- Added private/unlisted/public visibility controls, informational payout
+  administration, printable public views, formula-safe entrant/result/
+  standings/audit CSV exports, and an in-product tournament-day Help guide.
+- Added fail-closed Production database configuration, database-aware readiness,
+  process liveness, loopback-only Compose publishing, service restart policies,
+  and a bounded GitHub validation workflow.
+- Added migration `004_launch_operations.sql` to distinguish retained
+  downstream-reset revisions from confirmed result revisions.
+- DNS, external Account integration, live payments, Sandbox, Production,
+  release tags, and GitHub Releases remain unchanged.
+
 ## 0.3.0 — Unreleased
 
 - Added organizer competition setup for pool discipline, entrant type,

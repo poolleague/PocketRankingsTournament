@@ -3,8 +3,8 @@
     ViewData["Title"] = Model.Event.Name;
 }
 <section class="admin-heading">
-    <div><a class="back-link" href="/organizer">← Operations</a><p class="eyebrow">@TournamentLabels.Status(Model.Event.Status)</p><h1>@Model.Event.Name</h1><p>@Model.Event.Venue · @Model.Event.Locality · @Model.Event.StartsAt.ToString("dddd, MMMM d 'at' h:mm tt")</p></div>
-    <a class="secondary-button" href="/tournaments/@Model.Event.Id">Public view</a>
+    <div><a class="back-link" href="/organizer">← Operations</a><p class="eyebrow">@TournamentLabels.Status(Model.Event.Status) · @Model.Event.Visibility</p><h1>@Model.Event.Name</h1><p>@Model.Event.Venue · @Model.Event.Locality · @Model.Event.StartsAt.ToString("dddd, MMMM d 'at' h:mm tt")</p></div>
+    <div class="heading-actions"><a class="secondary-button" href="/tournaments/@Model.Event.Id">Public view</a><a class="secondary-button" href="/organizer/tournaments/@Model.Event.Id/exports/entrants.csv">Entrants CSV</a><a class="secondary-button" href="/organizer/tournaments/@Model.Event.Id/exports/results.csv">Results CSV</a><a class="secondary-button" href="/organizer/tournaments/@Model.Event.Id/exports/audit.csv">Audit CSV</a></div>
 </section>
 @if (TempData["Notice"] is string notice) { <div class="notice success" role="status">@notice</div> }
 @if (TempData["Error"] is string error) { <div class="notice error" role="alert">@error</div> }
@@ -18,7 +18,7 @@
                 <div><label for="competition-name">Competition name</label><input id="competition-name" name="Name" required maxlength="160" placeholder="Open 9-Ball" /></div>
                 <div><label for="discipline">Game</label><select id="discipline" name="Discipline">@foreach (var item in Enum.GetValues<PoolDiscipline>()) { <option value="@item">@item.ToString().Replace("Ball", "-Ball").Replace("OnePocket", "One-Pocket")</option> }</select></div>
                 <div><label for="entrant-type">Field</label><select id="entrant-type" name="EntrantType">@foreach (var item in Enum.GetValues<EntrantType>()) { <option value="@item">@item.ToString().Replace("ScotchDoubles", "Scotch doubles")</option> }</select></div>
-                <div><label for="format">Format</label><select id="format" name="Format"><option value="DoubleElimination">Double elimination</option><option value="SingleElimination">Single elimination</option></select></div>
+                <div><label for="format">Format</label><select id="format" name="Format"><option value="DoubleElimination">Double elimination</option><option value="SingleElimination">Single elimination</option><option value="RoundRobin">Round robin</option></select></div>
                 <div><label for="winners-race">Winners race to</label><input id="winners-race" type="number" name="WinnersRaceTo" min="1" max="100" value="5" required /></div>
                 <div><label for="losers-race">Elimination race to</label><input id="losers-race" type="number" name="LosersRaceTo" min="1" max="100" value="4" /></div>
             </div>
@@ -73,11 +73,45 @@
                         </form>
                     }
                 </section>
+                <section>
+                    <h4>Displayed payouts</h4>
+                    @if ((competition.Payouts?.Count ?? 0) == 0) { <p>No prize schedule has been published.</p> }
+                    else { <div class="payout-grid">@foreach (var payout in competition.Payouts!.OrderBy(item => item.Place)) { <div><span>@payout.Label</span><strong>@payout.Amount.ToString("C0")</strong></div> }</div> }
+                    @if ((User.IsInRole(TournamentRoles.Owner) || User.IsInRole(TournamentRoles.TournamentDirector)) && competition.DrawRevision == 0)
+                    {
+                        <form method="post" action="/organizer/tournaments/@Model.Event.Id/competitions/@competition.Id/payouts" class="inline-operation-form">
+                            @Html.AntiForgeryToken()
+                            <label for="payout-place-@competition.Id">Place</label><input id="payout-place-@competition.Id" type="number" name="Place" min="1" max="1024" value="1" required />
+                            <label for="payout-label-@competition.Id">Player-facing label</label><input id="payout-label-@competition.Id" name="Label" maxlength="100" value="Champion" required />
+                            <label for="payout-amount-@competition.Id">Amount (USD)</label><input id="payout-amount-@competition.Id" type="number" name="Amount" min="0" max="10000000" step="0.01" value="0" required />
+                            <button class="secondary-button" type="submit">Save displayed payout</button>
+                        </form>
+                    }
+                    <p class="fine-print">Display only. Pocket Rankings does not collect, hold, or mark these funds paid.</p>
+                </section>
             </div>
             @if (competition.Rounds.Count > 0)
             {
-                <details class="match-operations"><summary><strong>Score matches</strong><span>@competition.Rounds.SelectMany(item => item.Matches).Count() bracket matches</span></summary>
-                <div class="score-grid">@foreach (var match in competition.Rounds.SelectMany(item => item.Matches).Where(item => item.EntrantOne is not null && item.EntrantTwo is not null && TournamentMatchAccess.CanRecord(User, item.Id))) { <article class="score-card"><header><strong>@match.Id · @match.Label</strong><span>@(match.TableName ?? "Unassigned") · Version @match.ResultVersion</span></header>@if ((User.IsInRole(TournamentRoles.Owner) || User.IsInRole(TournamentRoles.TournamentDirector)) && Model.Tables.Any(item => item.IsActive)) { <form method="post" action="/organizer/tournaments/@Model.Event.Id/competitions/@competition.Id/matches/@match.Id/table" class="table-assignment">@Html.AntiForgeryToken()<select name="TableId" aria-label="Table for @match.Id">@foreach (var table in Model.Tables.Where(item => item.IsActive)) { <option value="@table.Id" selected="@(table.Name == match.TableName ? "selected" : null)">@table.Name</option> }</select><button type="submit">Assign table</button></form> }<form method="post" action="/organizer/tournaments/@Model.Event.Id/competitions/@competition.Id/matches/@match.Id/result">@Html.AntiForgeryToken()<input type="hidden" name="ExpectedVersion" value="@match.ResultVersion" /><label>@match.EntrantOne!.DisplayName<input type="number" name="EntrantOneScore" min="0" max="1000" value="@(match.EntrantOneScore ?? 0)" required /></label><label>@match.EntrantTwo!.DisplayName<input type="number" name="EntrantTwoScore" min="0" max="1000" value="@(match.EntrantTwoScore ?? 0)" required /></label><label>Outcome<select name="Outcome"><option value="Played">Played</option><option value="EntrantOneForfeit">First entrant forfeited</option><option value="EntrantTwoForfeit">Second entrant forfeited</option><option value="EntrantOneNoShow">First entrant no-show</option><option value="EntrantTwoNoShow">Second entrant no-show</option></select></label><label>Reason<input name="Reason" required minlength="3" maxlength="500" value="Score confirmed at table" /></label><button class="secondary-button" type="submit">@(match.ResultVersion == 0 ? "Record result" : "Correct result")</button></form></article> }</div></details>
+                <details class="match-operations" open><summary><strong>Run and score matches</strong><span>@competition.Rounds.SelectMany(item => item.Matches).Count() scheduled matches</span></summary>
+                <div class="score-grid">@foreach (var match in competition.Rounds.SelectMany(item => item.Matches).Where(item => item.EntrantOne is not null && item.EntrantTwo is not null && TournamentMatchAccess.CanRecord(User, item.Id)).OrderBy(item => item.Status is MatchStatus.InProgress ? 0 : item.Status is MatchStatus.Called ? 1 : item.Status is MatchStatus.Ready ? 2 : 3).ThenBy(item => item.Round).ThenBy(item => item.Position)) { <article class="score-card"><header><strong>@match.Id · @match.Label</strong><span>@TournamentLabels.MatchStatus(match.Status) · @(match.TableName ?? "Unassigned") · Version @match.ResultVersion</span></header>@if ((User.IsInRole(TournamentRoles.Owner) || User.IsInRole(TournamentRoles.TournamentDirector)) && Model.Tables.Any(item => item.IsActive) && match.ResultVersion == 0) { <form method="post" action="/organizer/tournaments/@Model.Event.Id/competitions/@competition.Id/matches/@match.Id/table" class="table-assignment">@Html.AntiForgeryToken()<select name="TableId" aria-label="Table for @match.Id">@foreach (var table in Model.Tables.Where(item => item.IsActive)) { <option value="@table.Id" selected="@(table.Name == match.TableName ? "selected" : null)">@table.Name</option> }</select><button type="submit">Assign table</button></form> }
+                @if (Model.Event.Status == TournamentStatus.InProgress && match.ResultVersion == 0 && match.Status is MatchStatus.Ready or MatchStatus.Called or MatchStatus.InProgress)
+                {
+                    var nextStatus = match.Status == MatchStatus.Ready ? MatchStatus.Called : MatchStatus.InProgress;
+                    if (match.Status != MatchStatus.InProgress)
+                    {
+                        <form method="post" action="/organizer/tournaments/@Model.Event.Id/competitions/@competition.Id/matches/@match.Id/status" class="match-status-form">@Html.AntiForgeryToken()<input type="hidden" name="ToStatus" value="@nextStatus" /><input type="hidden" name="Reason" value="Floor status confirmed" /><button type="submit">@(nextStatus == MatchStatus.Called ? "Call match" : "Start match")</button></form>
+                    }
+                    else if (User.IsInRole(TournamentRoles.Owner) || User.IsInRole(TournamentRoles.TournamentDirector))
+                    {
+                        <form method="post" action="/organizer/tournaments/@Model.Event.Id/competitions/@competition.Id/matches/@match.Id/status" class="match-status-form">@Html.AntiForgeryToken()<input type="hidden" name="ToStatus" value="Ready" /><input type="hidden" name="Reason" value="Returned to ready queue by director" /><button type="submit">Return to ready</button></form>
+                    }
+                }
+                <form method="post" action="/organizer/tournaments/@Model.Event.Id/competitions/@competition.Id/matches/@match.Id/result">@Html.AntiForgeryToken()<input type="hidden" name="ExpectedVersion" value="@match.ResultVersion" /><label>@match.EntrantOne!.DisplayName<input type="number" name="EntrantOneScore" min="0" max="1000" value="@(match.EntrantOneScore ?? 0)" required /></label><label>@match.EntrantTwo!.DisplayName<input type="number" name="EntrantTwoScore" min="0" max="1000" value="@(match.EntrantTwoScore ?? 0)" required /></label><label>Outcome<select name="Outcome"><option value="Played">Played</option><option value="EntrantOneForfeit">First entrant forfeited</option><option value="EntrantTwoForfeit">Second entrant forfeited</option><option value="EntrantOneNoShow">First entrant no-show</option><option value="EntrantTwoNoShow">Second entrant no-show</option></select></label><label>Reason<input name="Reason" required minlength="3" maxlength="500" value="Score confirmed at table" /></label>@if (match.ResultVersion > 0 && (User.IsInRole(TournamentRoles.Owner) || User.IsInRole(TournamentRoles.TournamentDirector))) { <label class="warning-check"><input type="checkbox" name="ResetAffectedMatches" value="true" /> If the winner changes, reset every affected later match</label> }<button class="secondary-button" type="submit">@(match.ResultVersion == 0 ? "Record result" : "Correct result")</button></form></article> }</div></details>
+                @if (competition.Format == CompetitionFormat.RoundRobin)
+                {
+                    var standings = TournamentStandings.Calculate(competition);
+                    <section class="standings-panel" aria-labelledby="standings-@competition.Id"><div class="section-heading"><h4 id="standings-@competition.Id">Live standings</h4><a href="/organizer/tournaments/@Model.Event.Id/competitions/@competition.Id/exports/standings.csv">Export CSV</a></div><div class="standings-table" role="table" aria-label="Live round-robin standings"><div role="row" class="standings-heading"><span role="columnheader">Pos</span><span role="columnheader">Entrant</span><span role="columnheader">Played</span><span role="columnheader">Won</span><span role="columnheader">Lost</span><span role="columnheader">Diff</span></div>@foreach (var row in standings) { <div role="row"><strong role="cell">@row.Position</strong><span role="cell">@row.Entrant.DisplayName</span><span role="cell">@row.Played</span><span role="cell">@row.Wins</span><span role="cell">@row.Losses</span><span role="cell">@(row.ScoreDifference > 0 ? "+" : "")@row.ScoreDifference</span></div> }</div></section>
+                }
             }
             @if ((User.IsInRole(TournamentRoles.Owner) || User.IsInRole(TournamentRoles.TournamentDirector)) && competition.Status == CompetitionStatus.InProgress && competition.Rounds.SelectMany(item => item.Matches).Any(item => item.Status == MatchStatus.Complete) && competition.Rounds.SelectMany(item => item.Matches).All(item => item.Status is MatchStatus.Complete or MatchStatus.Bye or MatchStatus.Conditional))
             {
@@ -89,6 +123,17 @@
 <div class="operations-grid">
     <section class="panel">
         <p class="eyebrow">Next action</p><h2>Lifecycle</h2>
+        @if ((User.IsInRole(TournamentRoles.Owner) || User.IsInRole(TournamentRoles.TournamentDirector)) && Model.Event.Status != TournamentStatus.Archived)
+        {
+            <form method="post" action="/organizer/tournaments/@Model.Event.Id/visibility" class="visibility-form">
+                @Html.AntiForgeryToken()
+                <label for="event-visibility">Public visibility</label>
+                <select id="event-visibility" name="ToVisibility">@foreach (var visibility in Enum.GetValues<TournamentVisibility>()) { <option value="@visibility" selected="@(visibility == Model.Event.Visibility ? "selected" : null)">@visibility</option> }</select>
+                <input type="hidden" name="Reason" value="Tournament visibility confirmed by organizer" />
+                <button class="secondary-button" type="submit">Update visibility</button>
+            </form>
+            <p class="fine-print">Private is organizer-only. Unlisted works by direct link. Public also appears in the tournament directory.</p>
+        }
         @if (Model.AvailableTransitions.Count > 0 && (User.IsInRole("owner") || User.IsInRole("tournament_director")))
         {
             @foreach (var next in Model.AvailableTransitions)

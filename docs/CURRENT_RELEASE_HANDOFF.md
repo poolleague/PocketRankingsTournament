@@ -1,12 +1,13 @@
 # Current Release Handoff
 
-Last verified: 2026-09-13 (America/New_York)
+Last verified: 2026-09-14 (America/New_York)
 
 ## Active foundation
 
 - Repository: `poolleague/PocketRankingsTournament`
 - Branch: `codex/tournament-foundation`
 - Competition-operations phase baseline: `e5907b8`
+- Launch-readiness phase baseline: `13a42d0`
 - Owner approved the shared Platform rules and the initial Tournament
   foundation on 2026-09-13.
 - Owner approved the Tournament-only administration/history phase on
@@ -23,8 +24,8 @@ Last verified: 2026-09-13 (America/New_York)
   match/result, placement, displayed-payout, and append-only audit data.
 - Public tournament list/detail, responsive live bracket, results, placements,
   and payout views.
-- Extensible discipline and stage vocabulary; single/double elimination are
-  the first implemented engines.
+- Extensible discipline and stage vocabulary; single elimination, double
+  elimination, and round robin are implemented engines.
 - Deterministic fictional development data and no real external delivery.
 - Tournament-local Owner, Tournament Director, and Scorekeeper policies;
   responsive organizer dashboard; private draft creation; one-way lifecycle;
@@ -52,11 +53,23 @@ Last verified: 2026-09-13 (America/New_York)
 - Additive migration `003_competition_operations.sql` retains draw-stage
   revisions and adds current-draw, bracket-key, strategy, outcome, and entrant
   integrity contracts.
+- On 2026-09-14 the owner directed continued Tournament coding toward a usable
+  launch candidate and required complete relevant repository documentation.
+  The owner again explicitly prohibited any operation in PoolLeagueWeb because
+  Claude is actively building League.
+- Version 0.4.0 adds single-cycle round robin, derived standings, match floor
+  states and table-conflict checks, corrected larger double-elimination routes,
+  odd-field bye propagation, conditional-final activation, director-confirmed
+  downstream result reset, informational payout management, visibility,
+  printing, safe CSV exports, Help, readiness/liveness, and CI validation.
+- Additive migration `004_launch_operations.sql` labels confirmed versus
+  downstream-reset result revisions. No League, Account, DNS, Sandbox,
+  Production, secret, tag, or release state changed.
 
 ## Current validation
 
 - Release build: PASS, zero warnings/errors.
-- Automated tests: PASS, 36/36.
+- Automated tests: PASS, 53/53.
 - Docker Compose configuration: PASS with a local placeholder supplied only to
   the validation process.
 - Browser: public directory and bracket render; no browser console errors;
@@ -71,8 +84,8 @@ Last verified: 2026-09-13 (America/New_York)
   rendered browser inspection; organizer document width remains within the
   viewport and the browser console has no errors.
 - PostgreSQL container/schema execution: unavailable because the local Docker
-  engine did not become ready. Do not treat static schema/Compose validation as
-  an executed migration.
+  API did not return from an approved engine check on 2026-09-14. Do not treat
+  static schema/Compose validation as an executed migration.
 - Competition operations: automated create/register/publish/result/advance,
   stale-version refusal, correction boundary, registration lock, check-in field
   filtering, table assignment, completion prerequisites, and exact event/match
@@ -82,6 +95,17 @@ Last verified: 2026-09-13 (America/New_York)
   corrected draw-version label PASS. The 390x844 organizer view has no
   horizontal document overflow (`390` viewport / `375` document), and the
   browser console reports no errors.
+- Version 0.4.0 browser: Help and navigation render; organizer exports,
+  informational payouts, floor controls, visibility, and downstream-reset
+  confirmation are present; public Print renders; browser console errors are
+  empty. `/health/live`, `/health/ready`, and `/health` return bounded healthy
+  Tournament JSON in Development, and a Production process without PostgreSQL
+  fails immediately.
+- Automated complete-field simulation passes for 3/4/5/8-player double
+  elimination and even/odd round robin pair coverage. Exact Docker migration,
+  container persistence, database-readiness failure, backup/restore, 0.4.0
+  phone viewport, and bounded load evidence remain required by
+  `LAUNCH_CHECKLIST.md` before deployment review.
 
 ## Product intent
 

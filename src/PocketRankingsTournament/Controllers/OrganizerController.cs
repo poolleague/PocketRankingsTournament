@@ -99,6 +99,20 @@ public sealed class OrganizerController : Controller
     }
 
     [Authorize(Policy = TournamentPolicies.ManageTournaments)]
+    [HttpPost("/organizer/tournaments/{id:guid}/visibility")]
+    [ValidateAntiForgeryToken]
+    // Keeps public sharing explicit and audited instead of coupling it to a lifecycle button.
+    public async Task<IActionResult> UpdateVisibility(Guid id, UpdateTournamentVisibilityInput input, CancellationToken cancellationToken)
+    {
+        input.TournamentId = id;
+        var result = TournamentEventAccess.CanAccess(User, id) && ModelState.IsValid
+            ? await _store.UpdateVisibilityAsync(input, User, cancellationToken)
+            : OperationResult.Failure("Visibility details are incomplete or access is unavailable.");
+        TempData[result.Succeeded ? "Notice" : "Error"] = result.Message;
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    [Authorize(Policy = TournamentPolicies.ManageTournaments)]
     [HttpPost("/organizer/tournaments/{id:guid}/competitions")]
     [ValidateAntiForgeryToken]
     // Keeps setup mutations on the event operations page while enforcing its event assignment at the boundary.
@@ -200,6 +214,20 @@ public sealed class OrganizerController : Controller
         return RedirectToAction(nameof(Details), new { id });
     }
 
+    [Authorize(Policy = TournamentPolicies.RecordScores)]
+    [HttpPost("/organizer/tournaments/{id:guid}/competitions/{competitionId:guid}/matches/{matchId}/status")]
+    [ValidateAntiForgeryToken]
+    // Keeps table calls and match starts inside the same event and match-assignment boundary as score entry.
+    public async Task<IActionResult> UpdateMatchStatus(Guid id, Guid competitionId, string matchId, UpdateMatchStatusInput input, CancellationToken cancellationToken)
+    {
+        input.TournamentId = id; input.CompetitionId = competitionId; input.MatchId = matchId;
+        var result = TournamentEventAccess.CanAccess(User, id) && ModelState.IsValid
+            ? await _store.UpdateMatchStatusAsync(input, User, cancellationToken)
+            : OperationResult.Failure("Match status details are incomplete or access is unavailable.");
+        TempData[result.Succeeded ? "Notice" : "Error"] = result.Message;
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
     [Authorize(Policy = TournamentPolicies.ManageTournaments)]
     [HttpPost("/organizer/tournaments/{id:guid}/competitions/{competitionId:guid}/complete")]
     [ValidateAntiForgeryToken]
@@ -212,6 +240,61 @@ public sealed class OrganizerController : Controller
             : OperationResult.Failure("Completion details are incomplete or access is unavailable.");
         TempData[result.Succeeded ? "Notice" : "Error"] = result.Message;
         return RedirectToAction(nameof(Details), new { id });
+    }
+
+    [Authorize(Policy = TournamentPolicies.ManageTournaments)]
+    [HttpPost("/organizer/tournaments/{id:guid}/competitions/{competitionId:guid}/payouts")]
+    [ValidateAntiForgeryToken]
+    // Saves informational prizes through the same event-scoped authorization and audit boundary as setup.
+    public async Task<IActionResult> UpsertPayout(Guid id, Guid competitionId, UpsertPayoutDisplayInput input, CancellationToken cancellationToken)
+    {
+        input.TournamentId = id; input.CompetitionId = competitionId;
+        var result = TournamentEventAccess.CanAccess(User, id) && ModelState.IsValid
+            ? await _store.UpsertPayoutDisplayAsync(input, User, cancellationToken)
+            : OperationResult.Failure("Payout details are incomplete or access is unavailable.");
+        TempData[result.Succeeded ? "Notice" : "Error"] = result.Message;
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    [Authorize(Policy = TournamentPolicies.ManageTournaments)]
+    [HttpGet("/organizer/tournaments/{id:guid}/exports/entrants.csv")]
+    // Provides a product-local registration backup without contacts, account claims, or database identifiers.
+    public async Task<IActionResult> ExportEntrants(Guid id, CancellationToken cancellationToken) =>
+        await ExportEventAsync(id, "entrants", TournamentCsvExporter.Entrants, cancellationToken);
+
+    [Authorize(Policy = TournamentPolicies.ManageTournaments)]
+    [HttpGet("/organizer/tournaments/{id:guid}/exports/results.csv")]
+    // Gives directors a current-score snapshot suitable for room records and post-event reconciliation.
+    public async Task<IActionResult> ExportResults(Guid id, CancellationToken cancellationToken) =>
+        await ExportEventAsync(id, "results", TournamentCsvExporter.Results, cancellationToken);
+
+    [Authorize(Policy = TournamentPolicies.ManageTournaments)]
+    [HttpGet("/organizer/tournaments/{id:guid}/competitions/{competitionId:guid}/exports/standings.csv")]
+    // Exports exactly the standings calculation shown publicly for one round-robin competition.
+    public async Task<IActionResult> ExportStandings(Guid id, Guid competitionId, CancellationToken cancellationToken)
+    {
+        var tournament = await _store.FindAsync(id, cancellationToken);
+        var competition = tournament?.Competitions.SingleOrDefault(item => item.Id == competitionId);
+        if (tournament is null || competition is null || !TournamentEventAccess.CanAccess(User, id)) return NotFound();
+        return File(System.Text.Encoding.UTF8.GetBytes(TournamentCsvExporter.Standings(competition)), "text/csv; charset=utf-8", $"tournament-{id:N}-standings.csv");
+    }
+
+    [Authorize(Policy = TournamentPolicies.ManageTournaments)]
+    [HttpGet("/organizer/tournaments/{id:guid}/exports/audit.csv")]
+    // Makes redacted append-only history portable without exposing authentication or provider evidence.
+    public async Task<IActionResult> ExportAudit(Guid id, CancellationToken cancellationToken)
+    {
+        if (!TournamentEventAccess.CanAccess(User, id) || await _store.FindAsync(id, cancellationToken) is null) return NotFound();
+        var csv = TournamentCsvExporter.Audit(await _store.GetAuditAsync(id, cancellationToken));
+        return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv; charset=utf-8", $"tournament-{id:N}-audit.csv");
+    }
+
+    // Centralizes event-scope checks and safe download naming for current-state exports.
+    private async Task<IActionResult> ExportEventAsync(Guid id, string label, Func<TournamentEvent, string> exporter, CancellationToken cancellationToken)
+    {
+        var tournament = await _store.FindAsync(id, cancellationToken);
+        if (tournament is null || !TournamentEventAccess.CanAccess(User, id)) return NotFound();
+        return File(System.Text.Encoding.UTF8.GetBytes(exporter(tournament)), "text/csv; charset=utf-8", $"tournament-{id:N}-{label}.csv");
     }
 
     [Authorize(Policy = TournamentPolicies.ManageAccess)]

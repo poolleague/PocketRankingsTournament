@@ -131,8 +131,8 @@ Source: https://playpass.com/sports-software/tournament-scheduler
    is approved.
 3. Registration, check-in, waitlist, table operations, score entry, and audited
    corrections.
-4. Round robin, Swiss, and group-to-finals stages using the same competition
-   model.
+4. Round robin using the same competition model (implemented in 0.4.0); Swiss
+   and group-to-finals remain next-stage engines.
 5. Doubles/Scotch doubles/team entrants, configurable handicaps, imports, and
    optional cross-product events.
 6. Payment-provider work only after pricing, legal, refund, and provider phases

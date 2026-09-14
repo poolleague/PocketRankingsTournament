@@ -16,6 +16,8 @@ public interface ITournamentStore
     Task<TournamentEvent> CreateAsync(CreateTournamentInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     // Moves lifecycle state only along approved one-way edges with actor/reason evidence.
     Task<bool> TransitionAsync(TransitionTournamentInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    // Changes public discoverability independently from the one-way operational lifecycle.
+    Task<OperationResult> UpdateVisibilityAsync(UpdateTournamentVisibilityInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     // Preserves the full readable state-transition narrative for retained events.
     Task<IReadOnlyList<TournamentStatusChange>> GetStatusHistoryAsync(Guid id, CancellationToken cancellationToken = default);
     // Returns redacted mutation evidence without exposing provider or session identifiers.
@@ -36,8 +38,12 @@ public interface ITournamentStore
     Task<OperationResult> CreateTableAsync(CreateTournamentTableInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     // Assigns a current-draw match to one venue table.
     Task<OperationResult> AssignMatchTableAsync(AssignMatchTableInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    // Moves an assigned current-draw match through ready, called, and in-progress floor states.
+    Task<OperationResult> UpdateMatchStatusAsync(UpdateMatchStatusInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     // Finalizes a competition only after all required bracket matches have results.
     Task<OperationResult> CompleteCompetitionAsync(CompleteCompetitionInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    // Creates or corrects an informational payout row before the draw is published.
+    Task<OperationResult> UpsertPayoutDisplayAsync(UpsertPayoutDisplayInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }
 
 public static class TournamentLifecycle
@@ -127,9 +133,9 @@ public sealed partial class DevelopmentTournamentStore : ITournamentStore
         lock (_sync)
         {
             return Task.FromResult(new TournamentDirectoryViewModel(
-                _events.Where(item => item.Status is TournamentStatus.InProgress or TournamentStatus.CheckIn).ToArray(),
-                _events.Where(item => item.Status == TournamentStatus.RegistrationOpen).ToArray(),
-                _events.Where(item => item.Status == TournamentStatus.Complete).OrderByDescending(item => item.StartsAt).ToArray()));
+                _events.Where(item => item.Visibility == TournamentVisibility.Public && item.Status is TournamentStatus.InProgress or TournamentStatus.CheckIn).ToArray(),
+                _events.Where(item => item.Visibility == TournamentVisibility.Public && item.Status == TournamentStatus.RegistrationOpen).ToArray(),
+                _events.Where(item => item.Visibility == TournamentVisibility.Public && item.Status == TournamentStatus.Complete).OrderByDescending(item => item.StartsAt).ToArray()));
         }
     }
 
@@ -163,7 +169,8 @@ public sealed partial class DevelopmentTournamentStore : ITournamentStore
             TournamentStatus.Draft,
             input.Description.Trim(),
             Array.Empty<Competition>(),
-            Array.Empty<PayoutDisplay>());
+            Array.Empty<PayoutDisplay>(),
+            TournamentVisibility.Private);
 
         lock (_sync)
         {
@@ -218,6 +225,21 @@ public sealed partial class DevelopmentTournamentStore : ITournamentStore
         }
     }
 
+    // Updates discoverability with audit evidence while keeping archived records out of public circulation.
+    public Task<OperationResult> UpdateVisibilityAsync(UpdateTournamentVisibilityInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        if (!DevelopmentTournamentStore.CanManage(actor, input.TournamentId)) return Task.FromResult(OperationResult.Failure("Visibility access is unavailable."));
+        lock (_sync)
+        {
+            var index = _events.FindIndex(item => item.Id == input.TournamentId);
+            if (index < 0 || _events[index].Status == TournamentStatus.Archived)
+                return Task.FromResult(OperationResult.Failure("Archived tournaments cannot be republished."));
+            _events[index] = _events[index] with { Visibility = input.ToVisibility };
+            _audit[input.TournamentId].Add(NewAudit(actor, "tournament_visibility_changed", input.TournamentId, input.Reason.Trim()));
+            return Task.FromResult(OperationResult.Success($"Tournament visibility changed to {input.ToVisibility.ToString().ToLowerInvariant()}."));
+        }
+    }
+
     // Returns newest-first copies so callers cannot mutate the retained in-memory evidence.
     public Task<IReadOnlyList<TournamentStatusChange>> GetStatusHistoryAsync(Guid id, CancellationToken cancellationToken = default)
     {
@@ -260,9 +282,9 @@ public sealed partial class PostgresTournamentStore : ITournamentStore
     {
         var all = await GetAllAsync(cancellationToken);
         return new TournamentDirectoryViewModel(
-            all.Where(item => item.Status is TournamentStatus.InProgress or TournamentStatus.CheckIn).ToArray(),
-            all.Where(item => item.Status == TournamentStatus.RegistrationOpen).ToArray(),
-            all.Where(item => item.Status == TournamentStatus.Complete).OrderByDescending(item => item.StartsAt).ToArray());
+            all.Where(item => item.Visibility == TournamentVisibility.Public && item.Status is TournamentStatus.InProgress or TournamentStatus.CheckIn).ToArray(),
+            all.Where(item => item.Visibility == TournamentVisibility.Public && item.Status == TournamentStatus.RegistrationOpen).ToArray(),
+            all.Where(item => item.Visibility == TournamentVisibility.Public && item.Status == TournamentStatus.Complete).OrderByDescending(item => item.StartsAt).ToArray());
     }
 
     // Projects only public UUIDs and domain values, keeping local bigint identities inside PostgreSQL.
@@ -271,7 +293,7 @@ public sealed partial class PostgresTournamentStore : ITournamentStore
         var result = new List<TournamentEvent>();
         await using var command = _dataSource.CreateCommand("""
             SELECT e.public_uuid, e.name, COALESCE(v.name, ''), COALESCE(v.locality, ''),
-                   e.starts_at, e.status, e.description
+                   e.starts_at, e.status, e.description, e.visibility
             FROM tourn.events e
             LEFT JOIN tourn.venues v ON v.venue_id = e.venue_id
             ORDER BY e.starts_at DESC, e.event_id DESC
@@ -282,7 +304,7 @@ public sealed partial class PostgresTournamentStore : ITournamentStore
             result.Add(new TournamentEvent(
                 reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
                 reader.GetFieldValue<DateTimeOffset>(4), ParseStatus(reader.GetString(5)), reader.GetString(6),
-                Array.Empty<Competition>(), Array.Empty<PayoutDisplay>()));
+                Array.Empty<Competition>(), Array.Empty<PayoutDisplay>(), ParseVisibility(reader.GetString(7))));
         }
 
         return result;
@@ -401,6 +423,20 @@ public sealed partial class PostgresTournamentStore : ITournamentStore
         return true;
     }
 
+    // Locks the event while changing discoverability so audit evidence cannot lag the visible state.
+    public async Task<OperationResult> UpdateVisibilityAsync(UpdateTournamentVisibilityInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        if (!DevelopmentTournamentStore.CanManage(actor, input.TournamentId)) return OperationResult.Failure("Visibility access is unavailable.");
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("UPDATE tourn.events SET visibility=@visibility,updated_at=CURRENT_TIMESTAMP WHERE public_uuid=@id AND status<>'archived'", connection, transaction);
+        command.Parameters.AddWithValue("visibility", DbVisibility(input.ToVisibility)); command.Parameters.AddWithValue("id", input.TournamentId);
+        if (await command.ExecuteNonQueryAsync(cancellationToken) != 1) { await transaction.RollbackAsync(cancellationToken); return OperationResult.Failure("Tournament not found or already archived."); }
+        await InsertAuditAsync(connection, transaction, actor, "tournament_visibility_changed", input.TournamentId, input.Reason.Trim(), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return OperationResult.Success($"Tournament visibility changed to {input.ToVisibility.ToString().ToLowerInvariant()}.");
+    }
+
     // Reads immutable lifecycle evidence separately from the mutable current-event projection.
     public async Task<IReadOnlyList<TournamentStatusChange>> GetStatusHistoryAsync(Guid id, CancellationToken cancellationToken = default)
     {
@@ -479,6 +515,16 @@ public sealed partial class PostgresTournamentStore : ITournamentStore
         _ => status.ToString().ToLowerInvariant()
     };
 
+    private static TournamentVisibility ParseVisibility(string value) => value switch
+    {
+        "private" => TournamentVisibility.Private,
+        "unlisted" => TournamentVisibility.Unlisted,
+        "public" => TournamentVisibility.Public,
+        _ => throw new InvalidOperationException($"Unknown tournament visibility '{value}'.")
+    };
+
+    private static string DbVisibility(TournamentVisibility visibility) => visibility.ToString().ToLowerInvariant();
+
     private static string ActorName(ClaimsPrincipal actor) => actor.Identity?.Name ?? "Unknown organizer";
     private static string ActorRole(ClaimsPrincipal actor) => actor.FindFirstValue(ClaimTypes.Role) ?? "unknown";
 }
@@ -505,8 +551,8 @@ internal static class TournamentFixtures
         {
             Matches = rounds[0].Matches.Select((match, index) => index switch
             {
-                0 => match with { EntrantOneScore = 5, EntrantTwoScore = 2, Status = MatchStatus.Complete, TableName = "Table 1", ResultVersion = 1 },
-                1 => match with { EntrantOneScore = 5, EntrantTwoScore = 4, Status = MatchStatus.Complete, TableName = "Table 3", ResultVersion = 1 },
+                0 => match with { EntrantOneScore = 5, EntrantTwoScore = 2, Status = MatchStatus.Complete, TableName = "Table 1", ResultVersion = 1, WinnerId = match.EntrantOne!.Id },
+                1 => match with { EntrantOneScore = 5, EntrantTwoScore = 4, Status = MatchStatus.Complete, TableName = "Table 3", ResultVersion = 1, WinnerId = match.EntrantOne!.Id },
                 2 => match with { Status = MatchStatus.InProgress, TableName = "Table 2" },
                 _ => match with { Status = MatchStatus.Called, TableName = "Table 4" }
             }).ToArray()

@@ -26,7 +26,13 @@ does not implement or store passwords. See `AGENTS.md` for repo-specific rules,
 `docs/CURRENT_RELEASE_HANDOFF.md` for current state, and
 `docs/COMPETITIVE_RECON.md` for the product research behind the roadmap.
 
-Single- and double-elimination are the operational bracket engines in version
-0.3.0. Round robin, Swiss, and group-to-finals remain modeled roadmap formats;
-the application refuses to generate them rather than producing an incorrect
-draw. No DNS or deployment has been configured.
+Single elimination, double elimination, and single-cycle round robin are the
+operational competition engines in version 0.4.0. Directors can run table
+calls, publish payouts for display, correct dependent bracket paths with
+retained evidence, print the public draw, and export safe local records. Swiss
+and group-to-finals remain modeled roadmap formats; the application refuses to
+generate them rather than producing an incorrect schedule.
+
+Start with `docs/OPERATIONS.md` for the tournament-day workflow and
+`docs/LAUNCH_CHECKLIST.md` for the remaining environment decisions and launch
+gate. No DNS or deployment has been configured.

@@ -71,4 +71,18 @@ public sealed class SchemaContractTests
         Assert.DoesNotContain("league.", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("email", sql, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    // Keeps invalidated downstream results distinguishable from confirmed scores in retained history.
+    public void LaunchOperationsMigrationLabelsDownstreamResetRevisions()
+    {
+        var sql = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Database", "004_launch_operations.sql"));
+
+        Assert.StartsWith("BEGIN;", sql.TrimStart(), StringComparison.Ordinal);
+        Assert.EndsWith("COMMIT;", sql.TrimEnd(), StringComparison.Ordinal);
+        Assert.Contains("revision_kind", sql, StringComparison.Ordinal);
+        Assert.Contains("downstream_reset", sql, StringComparison.Ordinal);
+        Assert.Contains("004_launch_operations", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("league.", sql, StringComparison.OrdinalIgnoreCase);
+    }
 }

@@ -45,6 +45,18 @@ public sealed class BracketBuilderTests
     }
 
     [Fact]
+    // Keeps each winner-side drop in its matching elimination slot instead of colliding in larger fields.
+    public void EightPlayerDoubleEliminationRoutesSecondRoundLosersSeparately()
+    {
+        var matches = _builder.Build(CompetitionFormat.DoubleElimination, Players(8)).SelectMany(round => round.Matches).ToArray();
+
+        Assert.Equal("L2M1", matches.Single(match => match.Id == "W2M1").LoserTo);
+        Assert.Equal("L2M2", matches.Single(match => match.Id == "W2M2").LoserTo);
+        Assert.Equal(matches.Where(match => match.Id.StartsWith("W2M", StringComparison.Ordinal)).Select(match => match.LoserTo).Count(),
+            matches.Where(match => match.Id.StartsWith("W2M", StringComparison.Ordinal)).Select(match => match.LoserTo).Distinct().Count());
+    }
+
+    [Fact]
     public void TwoPlayerDoubleEliminationRoutesBothSidesToChampionship()
     {
         var matches = _builder.Build(CompetitionFormat.DoubleElimination, Players(2))
@@ -65,7 +77,24 @@ public sealed class BracketBuilderTests
     }
 
     [Theory]
-    [InlineData(CompetitionFormat.RoundRobin)]
+    [InlineData(4, 3, 6)]
+    [InlineData(5, 5, 10)]
+    // Proves the circle scheduler creates every pairing once for even and odd fields.
+    public void RoundRobinSchedulesEveryPairExactlyOnce(int entrantCount, int expectedRounds, int expectedMatches)
+    {
+        var players = Players(entrantCount);
+        var rounds = _builder.Build(CompetitionFormat.RoundRobin, players);
+        var matches = rounds.SelectMany(round => round.Matches).ToArray();
+
+        Assert.Equal(expectedRounds, rounds.Count);
+        Assert.Equal(expectedMatches, matches.Length);
+        Assert.All(matches, match => Assert.Equal(MatchStatus.Ready, match.Status));
+        var pairings = matches.Select(match => string.Join(':', new[] { match.EntrantOne!.Id, match.EntrantTwo!.Id }.Order())).ToArray();
+        Assert.Equal(expectedMatches, pairings.Distinct().Count());
+        Assert.All(players, player => Assert.Equal(entrantCount - 1, matches.Count(match => match.EntrantOne?.Id == player.Id || match.EntrantTwo?.Id == player.Id)));
+    }
+
+    [Theory]
     [InlineData(CompetitionFormat.Swiss)]
     [InlineData(CompetitionFormat.GroupToFinals)]
     public void ModeledLaterFormatsFailClearlyInsteadOfCreatingWrongBrackets(CompetitionFormat format)

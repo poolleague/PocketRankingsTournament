@@ -1,0 +1,39 @@
+name: Validate Tournament
+
+on:
+  push:
+    branches: [main, "codex/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  release-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore PocketRankingsTournament.slnx
+
+      - name: Build Release candidate
+        run: dotnet build PocketRankingsTournament.slnx -c Release --no-restore
+
+      - name: Run automated tests
+        run: dotnet test PocketRankingsTournament.slnx -c Release --no-build --no-restore
+
+      - name: Check vulnerable dependencies
+        run: dotnet list PocketRankingsTournament.slnx package --vulnerable --include-transitive
+
+      - name: Validate isolated Compose configuration
+        env:
+          TOURNAMENT_DB_PASSWORD: deterministic-ci-placeholder-not-a-secret
+        run: docker compose config --quiet

@@ -15,6 +15,30 @@ namespace PocketRankingsTournament.Tests;
 public sealed class AdministrationTests
 {
     [Fact]
+    // Separates direct-link sharing from directory discovery while retaining private organizer previews.
+    public async Task VisibilityChangesAreAuditedAndOnlyPublicEventsAreListed()
+    {
+        var store = new DevelopmentTournamentStore(new BracketBuilder());
+        var actor = Principal(TournamentRoles.Owner);
+        var created = await store.CreateAsync(new CreateTournamentInput
+        {
+            Name = "Private Community Open",
+            Venue = "Corner Pocket",
+            StartsAtLocal = DateTime.Today.AddDays(7)
+        }, actor);
+        Assert.Equal(TournamentVisibility.Private, created.Visibility);
+        Assert.DoesNotContain((await store.GetDirectoryAsync()).Upcoming, item => item.Id == created.Id);
+
+        Assert.True(await store.TransitionAsync(new TransitionTournamentInput { TournamentId = created.Id, ToStatus = TournamentStatus.RegistrationOpen, Reason = "Registration ready" }, actor));
+        Assert.True((await store.UpdateVisibilityAsync(new UpdateTournamentVisibilityInput { TournamentId = created.Id, ToVisibility = TournamentVisibility.Unlisted, Reason = "Direct link only" }, actor)).Succeeded);
+        Assert.DoesNotContain((await store.GetDirectoryAsync()).Upcoming, item => item.Id == created.Id);
+
+        Assert.True((await store.UpdateVisibilityAsync(new UpdateTournamentVisibilityInput { TournamentId = created.Id, ToVisibility = TournamentVisibility.Public, Reason = "Directory publication approved" }, actor)).Succeeded);
+        Assert.Contains((await store.GetDirectoryAsync()).Upcoming, item => item.Id == created.Id);
+        Assert.Contains((await store.GetAuditAsync(created.Id)), entry => entry.Action == "tournament_visibility_changed");
+    }
+
+    [Fact]
     // Guards the historical invariant that public events never move back into an editable phase.
     public void LifecycleOnlyMovesForwardThroughPublishedHistory()
     {

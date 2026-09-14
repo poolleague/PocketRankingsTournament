@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Npgsql;
 using PocketRankingsTournament.Security;
 using PocketRankingsTournament.Services;
@@ -41,6 +43,7 @@ public class Program
         });
         builder.Services.AddAuthorization(options => TournamentAuthorization.Configure(options));
         builder.Services.AddSingleton<BracketBuilder>();
+        builder.Services.AddHealthChecks();
 
         var connectionString = builder.Configuration.GetConnectionString("TournamentDatabase");
         if (!string.IsNullOrWhiteSpace(connectionString))
@@ -49,11 +52,17 @@ public class Program
             builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
             builder.Services.AddHostedService<PostgresSchemaInitializer>();
             builder.Services.AddScoped<ITournamentStore, PostgresTournamentStore>();
+            builder.Services.AddHealthChecks().AddCheck<TournamentReadinessCheck>("tournament_database", tags: new[] { "ready" });
         }
-        else
+        else if (builder.Environment.IsDevelopment())
         {
             // The fictional store keeps local design and automated work usable without pretending to be Production persistence.
             builder.Services.AddSingleton<ITournamentStore, DevelopmentTournamentStore>();
+        }
+        else
+        {
+            // A deployed installation must never appear healthy while silently serving fictional in-memory data.
+            throw new InvalidOperationException("ConnectionStrings:TournamentDatabase is required outside Development.");
         }
 
         var app = builder.Build();
@@ -87,8 +96,33 @@ public class Program
             name: "default",
             pattern: "{controller=Home}/{action=Index}/{id?}");
 
-        app.MapGet("/health", () => Results.Ok(new { status = "healthy", product = "tournament" }));
+        app.MapHealthChecks("/health/live", new HealthCheckOptions
+        {
+            Predicate = _ => false,
+            ResponseWriter = WriteHealthAsync
+        });
+        app.MapHealthChecks("/health/ready", new HealthCheckOptions
+        {
+            Predicate = check => check.Tags.Contains("ready"),
+            ResponseWriter = WriteHealthAsync
+        });
+        app.MapHealthChecks("/health", new HealthCheckOptions
+        {
+            Predicate = check => check.Tags.Contains("ready"),
+            ResponseWriter = WriteHealthAsync
+        });
 
         app.Run();
+    }
+
+    // Returns a bounded product-local health document without exception or connection-string details.
+    private static Task WriteHealthAsync(HttpContext context, HealthReport report)
+    {
+        context.Response.ContentType = "application/json";
+        return context.Response.WriteAsJsonAsync(new
+        {
+            status = report.Status == HealthStatus.Healthy ? "healthy" : "unhealthy",
+            product = "tournament"
+        });
     }
 }

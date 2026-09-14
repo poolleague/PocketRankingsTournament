@@ -24,8 +24,52 @@ public sealed class BracketBuilder
         {
             CompetitionFormat.SingleElimination => BuildSingleElimination(participants),
             CompetitionFormat.DoubleElimination => BuildDoubleElimination(participants, includeGrandFinalReset),
+            CompetitionFormat.RoundRobin => BuildRoundRobin(participants),
             _ => throw new NotSupportedException($"{format} is modeled but its scheduling engine is planned for a later phase.")
         };
+    }
+
+    // Uses the circle method so every entrant plays every other entrant exactly once with balanced rounds.
+    private static IReadOnlyList<BracketRound> BuildRoundRobin(IReadOnlyList<Participant> participants)
+    {
+        var rotating = participants
+            .OrderBy(participant => participant.Seed ?? int.MaxValue)
+            .ThenBy(participant => participant.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Cast<Participant?>()
+            .ToList();
+        if (rotating.Count % 2 != 0)
+        {
+            rotating.Add(null);
+        }
+
+        var rounds = new List<BracketRound>();
+        for (var roundNumber = 1; roundNumber < rotating.Count; roundNumber++)
+        {
+            var matches = new List<BracketMatch>();
+            for (var pair = 0; pair < rotating.Count / 2; pair++)
+            {
+                var first = rotating[pair];
+                var second = rotating[rotating.Count - 1 - pair];
+                if (first is null || second is null)
+                {
+                    continue;
+                }
+
+                var position = matches.Count + 1;
+                matches.Add(new BracketMatch(
+                    $"RR{roundNumber}M{position}", "Round robin", roundNumber, position,
+                    $"Round {roundNumber}", first, second, null, null, MatchStatus.Ready));
+            }
+
+            rounds.Add(new BracketRound($"RR{roundNumber}", $"Round {roundNumber}", "Round robin", roundNumber, matches));
+
+            // The first entrant stays fixed while the remaining entrants rotate one place clockwise.
+            var last = rotating[^1];
+            rotating.RemoveAt(rotating.Count - 1);
+            rotating.Insert(1, last);
+        }
+
+        return rounds;
     }
 
     // Produces winner-bracket rounds with explicit advancement targets; byes advance without inventing results.
@@ -107,7 +151,9 @@ public sealed class BracketBuilder
                     WinnerTo = roundIndex == winnerRounds.Count - 1 ? "GF1" : match.WinnerTo,
                     LoserTo = winnerRoundCount == 1
                         ? "GF1"
-                        : $"L{loserRoundNumber}M{Math.Max(1, (match.Position + 1) / 2)}"
+                        : roundIndex == 0
+                            ? $"L{loserRoundNumber}M{(match.Position + 1) / 2}"
+                            : $"L{loserRoundNumber}M{match.Position}"
                 }).ToArray()
             };
         }

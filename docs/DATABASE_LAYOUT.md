@@ -1,6 +1,6 @@
 # PostgreSQL Database Layout
 
-Version: competition operations 0.3.0 · updated 2026-09-13
+Version: launch readiness 0.4.0 · updated 2026-09-14
 
 Each client installation owns one isolated Tournament database. It shares no
 credential, volume, network, or table with League, Account, Player Profile, or
@@ -31,15 +31,25 @@ publication instant, retained stage revision numbers, stable bracket keys,
 seeded/randomized/manual draw strategy, played/forfeit/no-show outcomes, and
 venue-table public UUIDs, match scorekeeper assignments, and indexes that
 prevent duplicate active display names or bracket identities.
+Version 0.4.0 uses the existing match timestamps for ready/called/in-progress
+floor state and the existing `payout_displays` table for pre-draw
+informational prizes.
 Publishing a corrected pre-play draw adds another stage set and snapshot; the
 old revision remains in PostgreSQL. Result corrections append another revision
-and use `result_version` for optimistic concurrency. A recorded winner cannot
-be changed by the ordinary correction path because that would invalidate
-downstream matches and requires a future explicit resolution workflow.
+and use `result_version` for optimistic concurrency. Migration
+`004_launch_operations.sql` adds constrained `revision_kind` values:
+`recorded` for a confirmed score and `downstream_reset` when a
+director-confirmed winner reversal invalidates a dependent result. Reset rows
+retain prior evidence while current scores, timestamps, and routed entrants
+are rebuilt from the corrected path.
+
+Round-robin standings are derived from current completed match revisions. They
+are not stored as a second mutable table, which prevents rank data from
+drifting from the authoritative scores.
 
 Published tournaments are completed and then archived rather than deleted.
 Draw and result corrections append revisions with actor/reason evidence. There
-is no automatic history purge in version 0.3.0; a later privacy-retention policy
+is no automatic history purge in version 0.4.0; a later privacy-retention policy
 may unlink or anonymize identity without erasing competitive results.
 
 `payout_displays` is informational bookkeeping. The foundation does not hold

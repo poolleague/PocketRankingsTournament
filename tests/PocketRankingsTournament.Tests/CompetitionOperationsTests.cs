@@ -94,6 +94,32 @@ public sealed class CompetitionOperationsTests
     }
 
     [Fact]
+    // Lets a director reverse a winner only by explicitly invalidating every result that depended on it.
+    public async Task DirectorWinnerReversalResetsCompletedDownstreamPath()
+    {
+        var (store, eventId, competitionId) = await CreateCompetitionWithEntrantsAsync(4);
+        await PublishAsync(store, eventId, competitionId);
+        var actor = Principal(TournamentRoles.Owner);
+        var opening = (await store.FindAsync(eventId))!.Competitions.Single().Rounds[0].Matches;
+        Assert.True((await store.RecordMatchResultAsync(Result(eventId, competitionId, opening[0].Id, 5, 2, 0), actor)).Succeeded);
+        Assert.True((await store.RecordMatchResultAsync(Result(eventId, competitionId, opening[1].Id, 5, 1, 0), actor)).Succeeded);
+        var final = (await store.FindAsync(eventId))!.Competitions.Single().Rounds[^1].Matches[0];
+        Assert.True((await store.RecordMatchResultAsync(Result(eventId, competitionId, final.Id, 5, 3, 0), actor)).Succeeded);
+
+        var reversed = await store.RecordMatchResultAsync(
+            Result(eventId, competitionId, opening[0].Id, 2, 5, 1, resetAffected: true), actor);
+
+        Assert.True(reversed.Succeeded);
+        var corrected = (await store.FindAsync(eventId))!.Competitions.Single();
+        var correctedFinal = corrected.Rounds[^1].Matches[0];
+        Assert.Equal(MatchStatus.Ready, correctedFinal.Status);
+        Assert.Null(correctedFinal.EntrantOneScore);
+        Assert.Null(correctedFinal.EntrantTwoScore);
+        Assert.Equal(2, correctedFinal.ResultVersion);
+        Assert.Contains(opening[0].EntrantTwo!.Id, new[] { correctedFinal.EntrantOne!.Id, correctedFinal.EntrantTwo!.Id });
+    }
+
+    [Fact]
     // Locks the field after publication so a public draw cannot silently gain another entrant.
     public async Task PublishedDrawLocksRegistration()
     {
@@ -114,6 +140,25 @@ public sealed class CompetitionOperationsTests
 
         Assert.False(result.Succeeded);
         Assert.Contains("locked", result.Message);
+    }
+
+    [Fact]
+    // Makes prize displays useful before publication without letting later edits rewrite public expectations.
+    public async Task DisplayedPayoutCanBeCorrectedBeforeDrawButLocksAfterPublication()
+    {
+        var (store, eventId, competitionId) = await CreateCompetitionWithEntrantsAsync(2);
+        var actor = Principal(TournamentRoles.Owner);
+        var input = new UpsertPayoutDisplayInput { TournamentId = eventId, CompetitionId = competitionId, Place = 1, Label = "Champion", Amount = 250m };
+        Assert.True((await store.UpsertPayoutDisplayAsync(input, actor)).Succeeded);
+        input.Amount = 300m;
+        Assert.True((await store.UpsertPayoutDisplayAsync(input, actor)).Succeeded);
+        Assert.Equal(300m, Assert.Single((await store.FindAsync(eventId))!.Competitions.Single().Payouts!).Amount);
+
+        await store.PublishDrawAsync(new PublishDrawInput { TournamentId = eventId, CompetitionId = competitionId, Reason = "Field and payouts verified" }, actor);
+        input.Amount = 400m;
+        var locked = await store.UpsertPayoutDisplayAsync(input, actor);
+        Assert.False(locked.Succeeded);
+        Assert.Equal(300m, Assert.Single((await store.FindAsync(eventId))!.Competitions.Single().Payouts!).Amount);
     }
 
     [Fact]
@@ -203,6 +248,82 @@ public sealed class CompetitionOperationsTests
     }
 
     [Fact]
+    // Runs a match through the venue call sequence and refuses a second active match on the occupied table.
+    public async Task FloorStatusRequiresTableAndPreventsActiveTableConflict()
+    {
+        var (store, eventId, competitionId) = await CreateCompetitionWithEntrantsAsync(4, format: CompetitionFormat.RoundRobin);
+        await PublishAsync(store, eventId, competitionId);
+        var actor = Principal(TournamentRoles.Owner);
+        var matches = (await store.FindAsync(eventId))!.Competitions.Single().Rounds.SelectMany(round => round.Matches).Take(2).ToArray();
+        var missingTable = await store.UpdateMatchStatusAsync(Status(eventId, competitionId, matches[0].Id, MatchStatus.Called), actor);
+        Assert.False(missingTable.Succeeded);
+
+        Assert.True((await store.CreateTableAsync(new CreateTournamentTableInput { TournamentId = eventId, Name = "Table 1" }, actor)).Succeeded);
+        var table = Assert.Single(await store.GetTablesAsync(eventId));
+        foreach (var match in matches)
+        {
+            Assert.True((await store.AssignMatchTableAsync(new AssignMatchTableInput { TournamentId = eventId, CompetitionId = competitionId, MatchId = match.Id, TableId = table.Id }, actor)).Succeeded);
+        }
+
+        Assert.True((await store.UpdateMatchStatusAsync(Status(eventId, competitionId, matches[0].Id, MatchStatus.Called), actor)).Succeeded);
+        Assert.True((await store.UpdateMatchStatusAsync(Status(eventId, competitionId, matches[0].Id, MatchStatus.InProgress), actor)).Succeeded);
+        var conflict = await store.UpdateMatchStatusAsync(Status(eventId, competitionId, matches[1].Id, MatchStatus.Called), actor);
+        Assert.False(conflict.Succeeded);
+        Assert.Contains("active match", conflict.Message);
+    }
+
+    [Fact]
+    // Keeps standings deterministic from result evidence without storing a second mutable ranking table.
+    public async Task RoundRobinResultsProduceLiveStandings()
+    {
+        var (store, eventId, competitionId) = await CreateCompetitionWithEntrantsAsync(3, format: CompetitionFormat.RoundRobin);
+        await PublishAsync(store, eventId, competitionId);
+        var actor = Principal(TournamentRoles.Owner);
+        var competition = (await store.FindAsync(eventId))!.Competitions.Single();
+        var first = competition.Rounds.SelectMany(round => round.Matches).First();
+        Assert.True((await store.RecordMatchResultAsync(Result(eventId, competitionId, first.Id, 5, 2, 0), actor)).Succeeded);
+
+        var standings = TournamentStandings.Calculate((await store.FindAsync(eventId))!.Competitions.Single());
+        Assert.Equal(3, standings.Count);
+        Assert.Equal(first.EntrantOne!.Id, standings[0].Entrant.Id);
+        Assert.Equal(1, standings[0].Wins);
+        Assert.Equal(3, standings[0].ScoreDifference);
+    }
+
+    [Fact]
+    // Uses the confirmed outcome rather than tied numeric scores to rank a forfeit correctly.
+    public async Task ForfeitWinnerIsExplicitInRoundRobinStandings()
+    {
+        var (store, eventId, competitionId) = await CreateCompetitionWithEntrantsAsync(2, format: CompetitionFormat.RoundRobin);
+        await PublishAsync(store, eventId, competitionId);
+        var match = (await store.FindAsync(eventId))!.Competitions.Single().Rounds.Single().Matches.Single();
+        var input = Result(eventId, competitionId, match.Id, 0, 0, 0);
+        input.Outcome = MatchOutcome.EntrantTwoForfeit;
+        Assert.True((await store.RecordMatchResultAsync(input, Principal(TournamentRoles.Owner))).Succeeded);
+
+        var completed = (await store.FindAsync(eventId))!.Competitions.Single();
+        Assert.Equal(match.EntrantOne!.Id, completed.Rounds.Single().Matches.Single().WinnerId);
+        Assert.Equal(match.EntrantOne.Id, TournamentStandings.Calculate(completed)[0].Entrant.Id);
+    }
+
+    [Fact]
+    // Derives final finishers from the explicit winner projection used by public results.
+    public async Task CompletedSingleEliminationPublishesPlacements()
+    {
+        var (store, eventId, competitionId) = await CreateCompetitionWithEntrantsAsync(2);
+        await PublishAsync(store, eventId, competitionId);
+        var actor = Principal(TournamentRoles.Owner);
+        var match = (await store.FindAsync(eventId))!.Competitions.Single().Rounds.Single().Matches.Single();
+        Assert.True((await store.RecordMatchResultAsync(Result(eventId, competitionId, match.Id, 5, 2, 0), actor)).Succeeded);
+        Assert.True((await store.CompleteCompetitionAsync(new CompleteCompetitionInput { TournamentId = eventId, CompetitionId = competitionId, Reason = "Final reviewed" }, actor)).Succeeded);
+
+        var placements = TournamentPlacements.Calculate((await store.FindAsync(eventId))!.Competitions.Single());
+        Assert.Equal(2, placements.Count);
+        Assert.Equal(match.EntrantOne!.Id, placements[0].Entrant.Id);
+        Assert.Equal("Champion", placements[0].Label);
+    }
+
+    [Fact]
     // Prevents an event from entering live scoring before every configured competition has a published draw.
     public async Task TournamentCannotStartWithoutPublishedDraw()
     {
@@ -239,6 +360,58 @@ public sealed class CompetitionOperationsTests
             ToStatus = TournamentStatus.Complete,
             Reason = "All competitions finalized"
         }, actor));
+    }
+
+    [Fact]
+    // Activates the if-needed final only when the elimination-side finalist wins the first championship match.
+    public async Task EliminationSideChampionshipWinActivatesResetFinal()
+    {
+        var (store, eventId, competitionId) = await CreateCompetitionWithEntrantsAsync(2, format: CompetitionFormat.DoubleElimination);
+        await PublishAsync(store, eventId, competitionId);
+        var actor = Principal(TournamentRoles.Owner);
+        var winnersMatch = (await store.FindAsync(eventId))!.Competitions.Single().Rounds.SelectMany(round => round.Matches).Single(match => match.Id == "W1M1");
+        Assert.True((await store.RecordMatchResultAsync(Result(eventId, competitionId, winnersMatch.Id, 5, 2, 0), actor)).Succeeded);
+        var final = (await store.FindAsync(eventId))!.Competitions.Single().Rounds.SelectMany(round => round.Matches).Single(match => match.Id == "GF1");
+        var firstIsEliminationSide = final.EntrantOne!.Id == winnersMatch.EntrantTwo!.Id;
+        var result = firstIsEliminationSide
+            ? Result(eventId, competitionId, final.Id, 5, 2, 0)
+            : Result(eventId, competitionId, final.Id, 2, 5, 0);
+        Assert.True((await store.RecordMatchResultAsync(result, actor)).Succeeded);
+
+        var reset = (await store.FindAsync(eventId))!.Competitions.Single().Rounds.SelectMany(round => round.Matches).Single(match => match.Id == "GF2");
+        Assert.Equal(MatchStatus.Ready, reset.Status);
+        Assert.NotNull(reset.EntrantOne);
+        Assert.NotNull(reset.EntrantTwo);
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(8)]
+    // Exercises complete double-elimination fields so byes and every winner/loser route reach a valid finish.
+    public async Task DoubleEliminationFieldCanRunToCompletion(int entrantCount)
+    {
+        var (store, eventId, competitionId) = await CreateCompetitionWithEntrantsAsync(entrantCount, format: CompetitionFormat.DoubleElimination);
+        await PublishAsync(store, eventId, competitionId);
+        var actor = Principal(TournamentRoles.Owner);
+        for (var step = 0; step < 100; step++)
+        {
+            var competition = (await store.FindAsync(eventId))!.Competitions.Single();
+            var next = competition.Rounds.SelectMany(round => round.Matches)
+                .FirstOrDefault(match => match.Status == MatchStatus.Ready && match.EntrantOne is not null && match.EntrantTwo is not null);
+            if (next is null) break;
+            Assert.True((await store.RecordMatchResultAsync(Result(eventId, competitionId, next.Id, 5, 2, next.ResultVersion), actor)).Succeeded);
+        }
+
+        var finished = (await store.FindAsync(eventId))!.Competitions.Single();
+        Assert.DoesNotContain(finished.Rounds.SelectMany(round => round.Matches), match => match.Status is MatchStatus.Waiting or MatchStatus.Ready or MatchStatus.Called or MatchStatus.InProgress);
+        Assert.True((await store.CompleteCompetitionAsync(new CompleteCompetitionInput
+        {
+            TournamentId = eventId,
+            CompetitionId = competitionId,
+            Reason = "Complete bracket verified"
+        }, actor)).Succeeded);
     }
 
     // Builds a fresh private event so each workflow test owns all of its mutable state.
@@ -297,7 +470,7 @@ public sealed class CompetitionOperationsTests
     }
 
     // Creates versioned score input without hiding which scores each correction supplies.
-    private static RecordMatchResultInput Result(Guid eventId, Guid competitionId, string matchId, int one, int two, int version) => new()
+    private static RecordMatchResultInput Result(Guid eventId, Guid competitionId, string matchId, int one, int two, int version, bool resetAffected = false) => new()
     {
         TournamentId = eventId,
         CompetitionId = competitionId,
@@ -305,7 +478,18 @@ public sealed class CompetitionOperationsTests
         EntrantOneScore = one,
         EntrantTwoScore = two,
         ExpectedVersion = version,
+        ResetAffectedMatches = resetAffected,
         Reason = "Score reviewed"
+    };
+
+    // Provides a consistent audited reason for venue-state tests.
+    private static UpdateMatchStatusInput Status(Guid eventId, Guid competitionId, string matchId, MatchStatus status) => new()
+    {
+        TournamentId = eventId,
+        CompetitionId = competitionId,
+        MatchId = matchId,
+        ToStatus = status,
+        Reason = "Floor status confirmed"
     };
 
     // Uses fictional claims only; no test identity can become a runtime credential.

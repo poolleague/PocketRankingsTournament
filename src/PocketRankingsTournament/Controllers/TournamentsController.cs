@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using PocketRankingsTournament.Models;
+using PocketRankingsTournament.Security;
 using PocketRankingsTournament.Services;
 
 namespace PocketRankingsTournament.Controllers;
@@ -24,7 +25,8 @@ public sealed class TournamentsController : Controller
     {
         var tournament = await _store.FindAsync(id, cancellationToken);
         // Private drafts and archived operational records must never become public through a guessed UUID.
-        if (tournament is null || tournament.Status is TournamentStatus.Draft or TournamentStatus.Archived)
+        if (tournament is null || tournament.Status is TournamentStatus.Draft or TournamentStatus.Archived
+            || tournament.Visibility == TournamentVisibility.Private && !TournamentEventAccess.CanAccess(User, id))
         {
             return NotFound();
         }

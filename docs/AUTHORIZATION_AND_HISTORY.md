@@ -1,6 +1,6 @@
 # Authorization, Entitlement, And History Contract
 
-Version: Tournament 0.3.0 · 2026-09-13
+Version: Tournament 0.4.0 · 2026-09-14
 
 ## Product boundary
 
@@ -10,10 +10,12 @@ database. Account remains the owner of `PersonId`, authentication, and the
 Tournament entitlement. PoolLeagueWeb is neither a dependency nor a data
 source for this workflow.
 
-Version 0.3.0 intentionally implements no Production login route. Missing
-Account configuration therefore leaves public brackets/results operational
-while every organizer policy fails closed. Development-only role selection
-uses fictional identities and is unreachable outside Development.
+Version 0.4.0 intentionally implements no Production login route. A
+non-Development process also refuses to start without its isolated PostgreSQL
+connection. With the database configured, public brackets/results remain
+operational while every organizer policy fails closed until Account identity
+is approved. Development-only role selection uses fictional identities and is
+unreachable outside Development.
 
 ## Future Account handoff boundary
 
@@ -48,6 +50,11 @@ carry stable match-key assignments. Wildcard assignments are accepted only on
 the marked fictional Development identity and are rejected for any other
 identity source.
 
+Owners and Tournament Directors may export entrants, current results,
+round-robin standings, and redacted audit history for an assigned event.
+Scorekeepers cannot use these director-level export routes. Exported cells
+neutralize spreadsheet formula prefixes before RFC-style CSV quoting.
+
 ## Tournament lifecycle
 
 The allowed one-way paths are:
@@ -61,8 +68,11 @@ The allowed one-way paths are:
 
 Every transition requires an authenticated authorized actor and a reason.
 Draft and Archived events are private even if a public UUID is guessed.
-Complete events remain on the public history surface; Archived events remain
-available to authorized organizers.
+Separately audited visibility is Private, Unlisted, or Public: Private is
+organizer-only, Unlisted is readable by direct UUID link but absent from the
+directory, and Public is discoverable. Complete Public events remain on the
+public history surface; Archived events remain available only to authorized
+organizers and cannot be republished.
 
 ## History and correction policy
 
@@ -73,11 +83,13 @@ available to authorized organizers.
 - Every score/result write appends `tourn.match_result_revisions` before the
   current match projection changes. Corrections require a reason and matching
   expected version. The ordinary correction path may fix a score while keeping
-  the same winner; winner reversal requires a separately designed downstream
-  resolution workflow so later matches cannot be silently invalidated.
+  the same winner. A winner reversal additionally requires an Owner or
+  Tournament Director to confirm the reset; every dependent later result is
+  retained as a `downstream_reset` revision, its current projection is cleared,
+  unaffected opponents remain in place, and stale score forms are invalidated.
 - Authenticated mutations append redacted `audit.entries` evidence. A database
   trigger rejects update or delete of audit rows.
-- Version 0.3.0 performs no automatic history purge. A later approved privacy
+- Version 0.4.0 performs no automatic history purge. A later approved privacy
   phase may unlink or anonymize identity while preserving the factual event,
   bracket, score, and placement record.
 
@@ -87,8 +99,8 @@ privacy policy requires a separately approved legal/product decision.
 
 ## Recovery
 
-The `002_administration_history.sql` and
-`003_competition_operations.sql` migrations are additive and idempotent.
+The `002_administration_history.sql`, `003_competition_operations.sql`, and
+`004_launch_operations.sql` migrations are additive and idempotent.
 Forward recovery is preferred after a failed application rollout. Before any
 deployed schema change, preserve a named protected backup and exact application
 image. Never roll back by dropping history tables or deleting the product-local

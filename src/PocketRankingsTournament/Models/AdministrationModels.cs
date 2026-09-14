@@ -134,6 +134,22 @@ public sealed class AssignMatchTableInput
     public Guid TableId { get; set; }
 }
 
+// Moves a ready match through the visible venue call sequence without changing its result version.
+public sealed class UpdateMatchStatusInput
+{
+    public Guid TournamentId { get; set; }
+    public Guid CompetitionId { get; set; }
+
+    [Required, StringLength(40, MinimumLength = 1)]
+    public string MatchId { get; set; } = "";
+
+    [EnumDataType(typeof(MatchStatus))]
+    public MatchStatus ToStatus { get; set; }
+
+    [Required, StringLength(500, MinimumLength = 3)]
+    public string Reason { get; set; } = "";
+}
+
 // Requires an organizer explanation before a competition becomes retained result history.
 public sealed class CompleteCompetitionInput
 {
@@ -142,6 +158,22 @@ public sealed class CompleteCompetitionInput
 
     [Required, StringLength(500, MinimumLength = 3)]
     public string Reason { get; set; } = "";
+}
+
+// Records a player-facing prize schedule while keeping payment collection outside Tournament.
+public sealed class UpsertPayoutDisplayInput
+{
+    public Guid TournamentId { get; set; }
+    public Guid CompetitionId { get; set; }
+
+    [Range(1, 1024)]
+    public int Place { get; set; }
+
+    [Required, StringLength(100, MinimumLength = 1)]
+    public string Label { get; set; } = "";
+
+    [Range(typeof(decimal), "0", "10000000")]
+    public decimal Amount { get; set; }
 }
 
 // Captures the publication decision that freezes an auditable draw revision.
@@ -174,6 +206,8 @@ public sealed class RecordMatchResultInput
     [Range(0, int.MaxValue)]
     public int ExpectedVersion { get; set; }
 
+    public bool ResetAffectedMatches { get; set; }
+
     [Required, StringLength(500, MinimumLength = 3)]
     public string Reason { get; set; } = "";
 }
@@ -190,6 +224,18 @@ public sealed class TransitionTournamentInput
 {
     public Guid TournamentId { get; set; }
     public TournamentStatus ToStatus { get; set; }
+
+    [Required, StringLength(500, MinimumLength = 3)]
+    public string Reason { get; set; } = "";
+}
+
+// Separates discoverability from lifecycle so a director can share an unlisted link without publishing a directory card.
+public sealed class UpdateTournamentVisibilityInput
+{
+    public Guid TournamentId { get; set; }
+
+    [EnumDataType(typeof(TournamentVisibility))]
+    public TournamentVisibility ToVisibility { get; set; }
 
     [Required, StringLength(500, MinimumLength = 3)]
     public string Reason { get; set; } = "";
