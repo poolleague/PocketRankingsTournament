@@ -50,7 +50,49 @@ public enum MatchStatus
     Conditional
 }
 
-public sealed record Participant(Guid Id, string DisplayName, int? Seed = null, string? Handicap = null);
+public enum CompetitionStatus
+{
+    Draft,
+    RegistrationOpen,
+    Drawn,
+    InProgress,
+    Complete,
+    Archived
+}
+
+public enum DrawStrategy
+{
+    Seeded,
+    Randomized,
+    Manual
+}
+
+public enum MatchOutcome
+{
+    Played,
+    EntrantOneForfeit,
+    EntrantTwoForfeit,
+    EntrantOneNoShow,
+    EntrantTwoNoShow
+}
+
+public enum RegistrationStatus
+{
+    Waitlisted,
+    Registered,
+    CheckedIn,
+    Withdrawn,
+    Disqualified
+}
+
+public sealed record Participant(
+    Guid Id,
+    string DisplayName,
+    int? Seed = null,
+    string? Handicap = null,
+    RegistrationStatus RegistrationStatus = RegistrationStatus.Registered);
+
+public sealed record TournamentTable(Guid Id, string Name, int SortOrder, bool IsActive = true);
 
 public sealed record BracketMatch(
     string Id,
@@ -66,7 +108,8 @@ public sealed record BracketMatch(
     string? TableName = null,
     string? WinnerTo = null,
     string? LoserTo = null,
-    bool IsConditional = false);
+    bool IsConditional = false,
+    int ResultVersion = 0);
 
 public sealed record BracketRound(string Id, string Name, string Bracket, int Number, IReadOnlyList<BracketMatch> Matches);
 
@@ -82,7 +125,10 @@ public sealed record Competition(
     bool UsesHandicap,
     string RulesLabel,
     IReadOnlyList<Participant> Participants,
-    IReadOnlyList<BracketRound> Rounds);
+    IReadOnlyList<BracketRound> Rounds,
+    CompetitionStatus Status = CompetitionStatus.Draft,
+    int DrawRevision = 0,
+    DateTimeOffset? DrawPublishedAt = null);
 
 public sealed record PayoutDisplay(int Place, string Label, decimal Amount);
 
@@ -122,6 +168,13 @@ public static class TournamentLabels
         TournamentStatus.RegistrationOpen => "Registration open",
         TournamentStatus.CheckIn => "Check-in",
         TournamentStatus.InProgress => "In progress",
+        _ => status.ToString()
+    };
+
+    public static string CompetitionStatus(CompetitionStatus status) => status switch
+    {
+        Models.CompetitionStatus.RegistrationOpen => "Registration open",
+        Models.CompetitionStatus.InProgress => "In progress",
         _ => status.ToString()
     };
 }

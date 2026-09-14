@@ -23,6 +23,30 @@ public static class TournamentClaimTypes
 {
     public const string Entitlement = "pocketrankings:tournament:entitlement";
     public const string EntitlementExpiresAt = "pocketrankings:tournament:entitlement_expires_at";
+    public const string EventAssignment = "pocketrankings:tournament:event";
+    public const string MatchAssignment = "pocketrankings:tournament:match";
+}
+
+public static class TournamentEventAccess
+{
+    // Owners administer their isolated installation; delegated roles must carry an explicit event assignment.
+    public static bool CanAccess(ClaimsPrincipal user, Guid eventId) =>
+        user.IsInRole(TournamentRoles.Owner)
+        || user.FindAll(TournamentClaimTypes.EventAssignment).Any(claim =>
+            string.Equals(claim.Value, eventId.ToString(), StringComparison.OrdinalIgnoreCase)
+            || (claim.Value == "*" && user.HasClaim("identity_source", "fictional-development-only")));
+}
+
+public static class TournamentMatchAccess
+{
+    // Owners/directors may manage the floor; scorekeepers require a stable match-key assignment.
+    public static bool CanRecord(ClaimsPrincipal user, string matchId) =>
+        user.IsInRole(TournamentRoles.Owner)
+        || user.IsInRole(TournamentRoles.TournamentDirector)
+        || (user.IsInRole(TournamentRoles.Scorekeeper)
+            && user.FindAll(TournamentClaimTypes.MatchAssignment).Any(claim =>
+                string.Equals(claim.Value, matchId, StringComparison.Ordinal)
+                || (claim.Value == "*" && user.HasClaim("identity_source", "fictional-development-only"))));
 }
 
 public static class TournamentEntitlement

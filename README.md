@@ -15,11 +15,18 @@ Matches `PoolLeagueWeb`'s layout: the actual project lives under
 
 ## Status
 
-The application now includes a public tournament surface plus a Tournament-local
-administration and retained-history foundation on `codex/tournament-foundation`.
+The application now includes a public tournament surface plus Tournament-local
+administration, retained history, competition setup, entrant registration,
+versioned draw publication, score entry, and bracket advancement on
+`codex/tournament-foundation`.
 Development provides fictional Owner, Tournament Director, and Scorekeeper
 identities for permission testing. Production administration deliberately fails
 closed until the separate Account identity handoff receives approval; this repo
 does not implement or store passwords. See `AGENTS.md` for repo-specific rules,
 `docs/CURRENT_RELEASE_HANDOFF.md` for current state, and
 `docs/COMPETITIVE_RECON.md` for the product research behind the roadmap.
+
+Single- and double-elimination are the operational bracket engines in version
+0.3.0. Round robin, Swiss, and group-to-finals remain modeled roadmap formats;
+the application refuses to generate them rather than producing an incorrect
+draw. No DNS or deployment has been configured.

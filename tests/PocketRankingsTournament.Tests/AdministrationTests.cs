@@ -32,8 +32,11 @@ public sealed class AdministrationTests
         var store = new DevelopmentTournamentStore(new BracketBuilder());
         var created = await store.CreateAsync(new CreateTournamentInput
         {
-            Name = " Neighborhood Nine Ball ", Venue = " Community Room ", Locality = " Riverton ",
-            StartsAtLocal = new DateTime(2026, 10, 3, 18, 0, 0), Description = " Open amateur event "
+            Name = " Neighborhood Nine Ball ",
+            Venue = " Community Room ",
+            Locality = " Riverton ",
+            StartsAtLocal = new DateTime(2026, 10, 3, 18, 0, 0),
+            Description = " Open amateur event "
         }, Principal(TournamentRoles.Owner));
 
         Assert.Equal(TournamentStatus.Draft, created.Status);
@@ -51,12 +54,16 @@ public sealed class AdministrationTests
         var store = new DevelopmentTournamentStore(new BracketBuilder());
         var created = await store.CreateAsync(new CreateTournamentInput
         {
-            Name = "Charity Eight Ball", Venue = "The Break Room", StartsAtLocal = DateTime.Today.AddDays(5)
+            Name = "Charity Eight Ball",
+            Venue = "The Break Room",
+            StartsAtLocal = DateTime.Today.AddDays(5)
         }, Principal(TournamentRoles.TournamentDirector));
 
         var changed = await store.TransitionAsync(new TransitionTournamentInput
         {
-            TournamentId = created.Id, ToStatus = TournamentStatus.RegistrationOpen, Reason = "Registration page reviewed"
+            TournamentId = created.Id,
+            ToStatus = TournamentStatus.RegistrationOpen,
+            Reason = "Registration page reviewed"
         }, Principal(TournamentRoles.TournamentDirector));
 
         Assert.True(changed);
@@ -76,7 +83,9 @@ public sealed class AdministrationTests
 
         var changed = await store.TransitionAsync(new TransitionTournamentInput
         {
-            TournamentId = active.Id, ToStatus = TournamentStatus.RegistrationOpen, Reason = "Attempt to reopen"
+            TournamentId = active.Id,
+            ToStatus = TournamentStatus.RegistrationOpen,
+            Reason = "Attempt to reopen"
         }, Principal(TournamentRoles.Owner));
 
         Assert.False(changed);
@@ -122,7 +131,9 @@ public sealed class AdministrationTests
         var store = new DevelopmentTournamentStore(new BracketBuilder());
         var created = await store.CreateAsync(new CreateTournamentInput
         {
-            Name = "Private Draft", Venue = "Community Room", StartsAtLocal = new DateTime(2026, 10, 3, 18, 0, 0)
+            Name = "Private Draft",
+            Venue = "Community Room",
+            StartsAtLocal = new DateTime(2026, 10, 3, 18, 0, 0)
         }, Principal(TournamentRoles.Owner));
         var controller = new TournamentsController(store);
 
@@ -137,11 +148,13 @@ public sealed class AdministrationTests
     {
         Assert.False(TournamentScheduling.TryResolveLocalStart(new CreateTournamentInput
         {
-            StartsAtLocal = new DateTime(2026, 3, 8, 2, 30, 0), TimeZoneId = "America/New_York"
+            StartsAtLocal = new DateTime(2026, 3, 8, 2, 30, 0),
+            TimeZoneId = "America/New_York"
         }, out _));
         Assert.False(TournamentScheduling.TryResolveLocalStart(new CreateTournamentInput
         {
-            StartsAtLocal = new DateTime(2026, 11, 1, 1, 30, 0), TimeZoneId = "America/New_York"
+            StartsAtLocal = new DateTime(2026, 11, 1, 1, 30, 0),
+            TimeZoneId = "America/New_York"
         }, out _));
     }
 

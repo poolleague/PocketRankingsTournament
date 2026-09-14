@@ -1,6 +1,6 @@
 # Authorization, Entitlement, And History Contract
 
-Version: Tournament 0.2.0 · 2026-09-13
+Version: Tournament 0.3.0 · 2026-09-13
 
 ## Product boundary
 
@@ -10,7 +10,7 @@ database. Account remains the owner of `PersonId`, authentication, and the
 Tournament entitlement. PoolLeagueWeb is neither a dependency nor a data
 source for this workflow.
 
-Version 0.2.0 intentionally implements no Production login route. Missing
+Version 0.3.0 intentionally implements no Production login route. Missing
 Account configuration therefore leaves public brackets/results operational
 while every organizer policy fails closed. Development-only role selection
 uses fictional identities and is unreachable outside Development.
@@ -36,12 +36,17 @@ refunds, and payment providers remain outside this repository.
 |---|---|---|
 | Owner | Settings, access administration, and every tournament | Full operation and history |
 | Tournament Director | Create tournaments | Operate explicitly assigned tournaments |
-| Scorekeeper | View the operations queue | Record results for explicitly assigned tournaments |
+| Scorekeeper | View the operations queue | Record results only for explicitly assigned matches in explicitly assigned tournaments |
 
 Public viewers require no account and cannot mutate data. Role revocation is a
 new append-only role row plus revocation timestamp, followed by local-session
 revocation once real Account sessions exist; rows are not erased to hide who
 previously held access.
+
+Delegated identities carry exact event UUID assignments. Scorekeepers also
+carry stable match-key assignments. Wildcard assignments are accepted only on
+the marked fictional Development identity and are rejected for any other
+identity source.
 
 ## Tournament lifecycle
 
@@ -66,10 +71,13 @@ available to authorized organizers.
 - Every published draw appends a complete JSON snapshot in
   `tourn.draw_revisions`; resetting a draw creates another revision.
 - Every score/result write appends `tourn.match_result_revisions` before the
-  current match projection changes. Corrections require a reason.
+  current match projection changes. Corrections require a reason and matching
+  expected version. The ordinary correction path may fix a score while keeping
+  the same winner; winner reversal requires a separately designed downstream
+  resolution workflow so later matches cannot be silently invalidated.
 - Authenticated mutations append redacted `audit.entries` evidence. A database
   trigger rejects update or delete of audit rows.
-- Version 0.2.0 performs no automatic history purge. A later approved privacy
+- Version 0.3.0 performs no automatic history purge. A later approved privacy
   phase may unlink or anonymize identity while preserving the factual event,
   bracket, score, and placement record.
 
@@ -79,7 +87,8 @@ privacy policy requires a separately approved legal/product decision.
 
 ## Recovery
 
-The `002_administration_history.sql` migration is additive and idempotent.
+The `002_administration_history.sql` and
+`003_competition_operations.sql` migrations are additive and idempotent.
 Forward recovery is preferred after a failed application rollout. Before any
 deployed schema change, preserve a named protected backup and exact application
 image. Never roll back by dropping history tables or deleting the product-local

@@ -14,7 +14,8 @@ different Compose projects with different credentials, volumes, and networks.
 4. Confirm both services are healthy and `GET /health` returns product
    `tournament` and status `healthy`.
 5. Confirm the initializer applied `001_initial_schema.sql` followed by
-   `002_administration_history.sql`; apply both a second time and verify they
+   `002_administration_history.sql`, then `003_competition_operations.sql`;
+   apply all three a second time and verify they
    succeed without changing retained records.
 6. Create a fictional Development tournament, restart only the application
    container, and verify the tournament, lifecycle history, and audit evidence
@@ -22,7 +23,8 @@ different Compose projects with different credentials, volumes, and networks.
 
 ## Recovery and rollback
 
-Migration `002_administration_history.sql` is additive. Its forward-recovery
+Migrations `002_administration_history.sql` and
+`003_competition_operations.sql` are additive. Their forward-recovery
 path is to correct and reapply the idempotent migration; it must not drop
 history tables after they contain records. Before any future schema deployment,
 take a named protected database backup, verify
@@ -34,4 +36,4 @@ Production rollback procedure.
 Production exposes no local administrator login. Administrative authorization
 must remain unavailable there until the separate Account handoff is approved
 and configured. No Sandbox, DNS, Caddy route, secret, or Production deployment
-is approved for version 0.2.0.
+is approved for version 0.3.0. DNS has not been updated for Tournament.

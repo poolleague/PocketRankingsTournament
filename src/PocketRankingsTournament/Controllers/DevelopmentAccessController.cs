@@ -45,7 +45,7 @@ public sealed class DevelopmentAccessController : Controller
             TournamentRoles.TournamentDirector => "Fictional Tournament Director",
             _ => "Fictional Scorekeeper"
         };
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, $"development-{role}"),
             new Claim(ClaimTypes.Name, displayName),
@@ -54,6 +54,16 @@ public sealed class DevelopmentAccessController : Controller
             new Claim(TournamentClaimTypes.EntitlementExpiresAt, new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero).ToString("O")),
             new Claim("identity_source", "fictional-development-only")
         };
+        if (role is TournamentRoles.TournamentDirector or TournamentRoles.Scorekeeper)
+        {
+            // The wildcard exists only in the fictional Development selector; Production handoffs must enumerate event UUIDs.
+            claims.Add(new Claim(TournamentClaimTypes.EventAssignment, "*"));
+        }
+        if (role == TournamentRoles.Scorekeeper)
+        {
+            // Fictional scorekeepers can exercise every local match card; Production assignments must name a stable match key.
+            claims.Add(new Claim(TournamentClaimTypes.MatchAssignment, "*"));
+        }
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
         return RedirectToAction("Index", "Organizer");

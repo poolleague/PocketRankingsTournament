@@ -1,6 +1,6 @@
 # Pocket Rankings Tournament Version
 
-Current development version: **0.1.0**
+Current development version: **0.3.0**
 
-This is an unreleased foundation candidate. Nothing is deployed to Sandbox or
-Production and no release tag exists.
+This is an unreleased competition-operations candidate. Nothing is deployed to
+Sandbox or Production, no DNS route exists, and no release tag exists.

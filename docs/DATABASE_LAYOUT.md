@@ -1,6 +1,6 @@
 # PostgreSQL Database Layout
 
-Version: administration/history 0.2.0 · updated 2026-09-13
+Version: competition operations 0.3.0 · updated 2026-09-13
 
 Each client installation owns one isolated Tournament database. It shares no
 credential, volume, network, or table with League, Account, Player Profile, or
@@ -26,9 +26,20 @@ revisions, and match-result revisions. `PersonId` appears only in an integration
 link; no Tournament table stores a password, contact, subscription charge, or
 payment credential.
 
+Migration `003_competition_operations.sql` adds the current draw revision and
+publication instant, retained stage revision numbers, stable bracket keys,
+seeded/randomized/manual draw strategy, played/forfeit/no-show outcomes, and
+venue-table public UUIDs, match scorekeeper assignments, and indexes that
+prevent duplicate active display names or bracket identities.
+Publishing a corrected pre-play draw adds another stage set and snapshot; the
+old revision remains in PostgreSQL. Result corrections append another revision
+and use `result_version` for optimistic concurrency. A recorded winner cannot
+be changed by the ordinary correction path because that would invalidate
+downstream matches and requires a future explicit resolution workflow.
+
 Published tournaments are completed and then archived rather than deleted.
 Draw and result corrections append revisions with actor/reason evidence. There
-is no automatic history purge in version 0.2.0; a later privacy-retention policy
+is no automatic history purge in version 0.3.0; a later privacy-retention policy
 may unlink or anonymize identity without erasing competitive results.
 
 `payout_displays` is informational bookkeeping. The foundation does not hold

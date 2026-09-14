@@ -20,6 +20,24 @@ public interface ITournamentStore
     Task<IReadOnlyList<TournamentStatusChange>> GetStatusHistoryAsync(Guid id, CancellationToken cancellationToken = default);
     // Returns redacted mutation evidence without exposing provider or session identifiers.
     Task<IReadOnlyList<TournamentAuditEntry>> GetAuditAsync(Guid id, CancellationToken cancellationToken = default);
+    // Creates one pool competition without widening access to other events or products.
+    Task<OperationResult> CreateCompetitionAsync(CreateCompetitionInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    // Adds a product-local entrant while registration remains editable.
+    Task<OperationResult> RegisterEntrantAsync(RegisterEntrantInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    // Freezes a versioned draw from the validated entrant inventory.
+    Task<OperationResult> PublishDrawAsync(PublishDrawInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    // Appends a versioned result and advances its bracket routes atomically.
+    Task<OperationResult> RecordMatchResultAsync(RecordMatchResultInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    // Changes registration/check-in state without erasing the entrant.
+    Task<OperationResult> UpdateEntrantStatusAsync(UpdateEntrantStatusInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    // Returns the event venue's active operational table inventory.
+    Task<IReadOnlyList<TournamentTable>> GetTablesAsync(Guid eventId, CancellationToken cancellationToken = default);
+    // Adds one venue table for match assignment.
+    Task<OperationResult> CreateTableAsync(CreateTournamentTableInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    // Assigns a current-draw match to one venue table.
+    Task<OperationResult> AssignMatchTableAsync(AssignMatchTableInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    // Finalizes a competition only after all required bracket matches have results.
+    Task<OperationResult> CompleteCompetitionAsync(CompleteCompetitionInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }
 
 public static class TournamentLifecycle
@@ -79,21 +97,27 @@ public static class TournamentScheduling
             : throw new ArgumentException("The selected local time or time zone is not valid.", nameof(input));
 }
 
-public sealed class DevelopmentTournamentStore : ITournamentStore
+public sealed partial class DevelopmentTournamentStore : ITournamentStore
 {
     private readonly object _sync = new();
     private readonly List<TournamentEvent> _events;
     private readonly Dictionary<Guid, List<TournamentStatusChange>> _history = new();
     private readonly Dictionary<Guid, List<TournamentAuditEntry>> _audit = new();
+    private readonly Dictionary<Guid, List<TournamentTable>> _tables = new();
+    private readonly BracketBuilder _bracketBuilder;
 
     // Provides fictional local state only when no PostgreSQL connection exists; Production never registers this store.
     public DevelopmentTournamentStore(BracketBuilder bracketBuilder)
     {
+        _bracketBuilder = bracketBuilder;
         _events = TournamentFixtures.Create(bracketBuilder).ToList();
         foreach (var tournament in _events)
         {
             _history[tournament.Id] = new List<TournamentStatusChange>();
             _audit[tournament.Id] = new List<TournamentAuditEntry>();
+            _tables[tournament.Id] = tournament.Competitions.Count > 0
+                ? Enumerable.Range(1, 4).Select(index => new TournamentTable(Guid.NewGuid(), $"Table {index}", index)).ToList()
+                : new List<TournamentTable>();
         }
     }
 
@@ -149,6 +173,7 @@ public sealed class DevelopmentTournamentStore : ITournamentStore
             {
                 NewAudit(actor, "tournament_created", created.Id, "Tournament created as a private draft")
             };
+            _tables[created.Id] = new List<TournamentTable>();
         }
 
         return Task.FromResult(created);
@@ -161,6 +186,20 @@ public sealed class DevelopmentTournamentStore : ITournamentStore
         {
             var index = _events.FindIndex(item => item.Id == input.TournamentId);
             if (index < 0 || !TournamentLifecycle.CanTransition(_events[index].Status, input.ToStatus))
+            {
+                return Task.FromResult(false);
+            }
+            if (input.ToStatus == TournamentStatus.CheckIn && _events[index].Competitions.Count == 0)
+            {
+                return Task.FromResult(false);
+            }
+            if (input.ToStatus == TournamentStatus.InProgress
+                && (_events[index].Competitions.Count == 0 || _events[index].Competitions.Any(item => item.DrawRevision == 0)))
+            {
+                return Task.FromResult(false);
+            }
+            if (input.ToStatus == TournamentStatus.Complete
+                && (_events[index].Competitions.Count == 0 || _events[index].Competitions.Any(item => item.Status != CompetitionStatus.Complete)))
             {
                 return Task.FromResult(false);
             }
@@ -206,7 +245,7 @@ public sealed class DevelopmentTournamentStore : ITournamentStore
     private static string ActorRole(ClaimsPrincipal actor) => actor.FindFirstValue(ClaimTypes.Role) ?? "unknown";
 }
 
-public sealed class PostgresTournamentStore : ITournamentStore
+public sealed partial class PostgresTournamentStore : ITournamentStore
 {
     private readonly NpgsqlDataSource _dataSource;
 
@@ -250,8 +289,11 @@ public sealed class PostgresTournamentStore : ITournamentStore
     }
 
     // Keeps UUID lookup semantics identical between Development and PostgreSQL stores.
-    public async Task<TournamentEvent?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
-        (await GetAllAsync(cancellationToken)).SingleOrDefault(item => item.Id == id);
+    public async Task<TournamentEvent?> FindAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var found = (await GetAllAsync(cancellationToken)).SingleOrDefault(item => item.Id == id);
+        return found is null ? null : found with { Competitions = await LoadCompetitionsAsync(id, cancellationToken) };
+    }
 
     // Commits venue, private event, and audit evidence atomically so no unaudited draft can survive.
     public async Task<TournamentEvent> CreateAsync(CreateTournamentInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -308,6 +350,25 @@ public sealed class PostgresTournamentStore : ITournamentStore
         {
             await transaction.RollbackAsync(cancellationToken);
             return false;
+        }
+
+        if (input.ToStatus is TournamentStatus.CheckIn or TournamentStatus.InProgress or TournamentStatus.Complete)
+        {
+            await using var readiness = new NpgsqlCommand("""
+                SELECT count(*) > 0
+                   AND (@requires_draw = false OR bool_and(current_draw_revision > 0))
+                   AND (@requires_complete = false OR bool_and(status = 'complete'))
+                FROM tourn.competitions
+                WHERE event_id = (SELECT event_id FROM tourn.events WHERE public_uuid = @id)
+                """, connection, transaction);
+            readiness.Parameters.AddWithValue("id", input.TournamentId);
+            readiness.Parameters.AddWithValue("requires_draw", input.ToStatus == TournamentStatus.InProgress);
+            readiness.Parameters.AddWithValue("requires_complete", input.ToStatus == TournamentStatus.Complete);
+            if (await readiness.ExecuteScalarAsync(cancellationToken) is not true)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return false;
+            }
         }
 
         var from = ParseStatus(status);
@@ -444,8 +505,8 @@ internal static class TournamentFixtures
         {
             Matches = rounds[0].Matches.Select((match, index) => index switch
             {
-                0 => match with { EntrantOneScore = 5, EntrantTwoScore = 2, Status = MatchStatus.Complete, TableName = "Table 1" },
-                1 => match with { EntrantOneScore = 5, EntrantTwoScore = 4, Status = MatchStatus.Complete, TableName = "Table 3" },
+                0 => match with { EntrantOneScore = 5, EntrantTwoScore = 2, Status = MatchStatus.Complete, TableName = "Table 1", ResultVersion = 1 },
+                1 => match with { EntrantOneScore = 5, EntrantTwoScore = 4, Status = MatchStatus.Complete, TableName = "Table 3", ResultVersion = 1 },
                 2 => match with { Status = MatchStatus.InProgress, TableName = "Table 2" },
                 _ => match with { Status = MatchStatus.Called, TableName = "Table 4" }
             }).ToArray()
@@ -453,7 +514,8 @@ internal static class TournamentFixtures
 
         var competition = new Competition(Guid.Parse("20000000-0000-0000-0000-000000000001"), "Open 9-Ball",
             PoolDiscipline.NineBall, "9-ball", CompetitionFormat.DoubleElimination, EntrantType.Singles, 5, 4, true,
-            "Local room rules · alternating break", participants, rounds);
+            "Local room rules · alternating break", participants, rounds,
+            CompetitionStatus.InProgress, 1, new DateTimeOffset(2026, 9, 13, 18, 0, 0, TimeSpan.FromHours(-4)));
 
         return new[]
         {

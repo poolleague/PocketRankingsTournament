@@ -6,7 +6,7 @@ Last verified: 2026-09-13 (America/New_York)
 
 - Repository: `poolleague/PocketRankingsTournament`
 - Branch: `codex/tournament-foundation`
-- Baseline: `925c4413445d970c1c5002f66aa41feaefbb4ee2`
+- Competition-operations phase baseline: `e5907b8`
 - Owner approved the shared Platform rules and the initial Tournament
   foundation on 2026-09-13.
 - Owner approved the Tournament-only administration/history phase on
@@ -37,11 +37,26 @@ Last verified: 2026-09-13 (America/New_York)
 - Real Account token consumption, organizer invitations, live cross-product
   transport, real payments, DNS, SB, and Production remain deferred and require
   their own approvals. Production administration fails closed meanwhile.
+- Owner approved the Tournament-only competition-operations phase on
+  2026-09-13, including commit/push, while confirming Tournament DNS has not
+  been updated and must remain out of scope.
+- Competition setup, local registration/waitlist/check-in/withdrawal state,
+  venue table inventory/assignment, seeded/randomized/manual draw publication,
+  score/forfeit/no-show recording, optimistic result versions, and winner/loser
+  bracket advancement are implemented for single- and double-elimination.
+  Later scheduling engines remain explicit roadmap work.
+- Delegated Tournament Director and Scorekeeper access now requires an exact
+  event assignment; scorekeepers additionally require a stable match-key
+  assignment. Only marked fictional Development identities accept local
+  all-event/all-match assignments.
+- Additive migration `003_competition_operations.sql` retains draw-stage
+  revisions and adds current-draw, bracket-key, strategy, outcome, and entrant
+  integrity contracts.
 
 ## Current validation
 
 - Release build: PASS, zero warnings/errors.
-- Automated tests: PASS, 24/24.
+- Automated tests: PASS, 36/36.
 - Docker Compose configuration: PASS with a local placeholder supplied only to
   the validation process.
 - Browser: public directory and bracket render; no browser console errors;
@@ -58,6 +73,15 @@ Last verified: 2026-09-13 (America/New_York)
 - PostgreSQL container/schema execution: unavailable because the local Docker
   engine did not become ready. Do not treat static schema/Compose validation as
   an executed migration.
+- Competition operations: automated create/register/publish/result/advance,
+  stale-version refusal, correction boundary, registration lock, check-in field
+  filtering, table assignment, completion prerequisites, and exact event/match
+  assignment checks PASS.
+- Updated organizer browser: competition setup, four-entrant registration,
+  draw publication, table inventory, score/table controls, audit evidence, and
+  corrected draw-version label PASS. The 390x844 organizer view has no
+  horizontal document overflow (`390` viewport / `375` document), and the
+  browser console reports no errors.
 
 ## Product intent
 
