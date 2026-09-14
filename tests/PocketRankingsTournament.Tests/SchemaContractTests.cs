@@ -85,4 +85,18 @@ public sealed class SchemaContractTests
         Assert.Contains("004_launch_operations", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("league.", sql, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    // Keeps temporary public locators hashed, unique, expiring, revocable, and installation-local.
+    public void LiveLinkMigrationEnforcesTemporaryHashedLookup()
+    {
+        var sql = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Database", "005_live_tournament_links.sql"));
+        Assert.Contains("token_hash bytea NOT NULL UNIQUE", sql, StringComparison.Ordinal);
+        Assert.Contains("octet_length(token_hash) = 32", sql, StringComparison.Ordinal);
+        Assert.Contains("expires_at timestamptz NOT NULL", sql, StringComparison.Ordinal);
+        Assert.Contains("revoked_at timestamptz", sql, StringComparison.Ordinal);
+        Assert.Contains("ux_event_live_links_one_active", sql, StringComparison.Ordinal);
+        Assert.Contains("ON CONFLICT (migration_name) DO NOTHING", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("PoolLeague", sql, StringComparison.OrdinalIgnoreCase);
+    }
 }

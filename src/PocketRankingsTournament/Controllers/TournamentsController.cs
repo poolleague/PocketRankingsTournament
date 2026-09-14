@@ -41,4 +41,19 @@ public sealed class TournamentsController : Controller
 
         return View(new TournamentDetailViewModel(tournament, competition));
     }
+
+    [HttpGet("/live/{code}")]
+    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+    // Uses the same read-only public projection after the store verifies code, expiry, revocation, and lifecycle.
+    public async Task<IActionResult> Live(string code, Guid? competitionId = null, CancellationToken cancellationToken = default)
+    {
+        var tournament = await _store.FindByLiveCodeAsync(code, cancellationToken);
+        if (tournament is null) return NotFound();
+        var competition = competitionId.HasValue
+            ? tournament.Competitions.SingleOrDefault(item => item.Id == competitionId.Value)
+            : tournament.Competitions.FirstOrDefault();
+        return competition is null
+            ? View("ComingSoon", tournament)
+            : View("Details", new TournamentDetailViewModel(tournament, competition));
+    }
 }

@@ -43,6 +43,7 @@ public class Program
         });
         builder.Services.AddAuthorization(options => TournamentAuthorization.Configure(options));
         builder.Services.AddSingleton<BracketBuilder>();
+        builder.Services.AddSingleton<LiveLinkRevealStore>();
         builder.Services.AddHealthChecks();
 
         var connectionString = builder.Configuration.GetConnectionString("TournamentDatabase");

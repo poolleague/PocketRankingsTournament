@@ -167,6 +167,73 @@ public sealed class AdministrationTests
     }
 
     [Fact]
+    // Proves a private event can expose only its read-only live projection without entering the public directory.
+    public async Task LiveLinkAllowsAnonymousViewWithoutChangingDirectoryVisibility()
+    {
+        var store = new DevelopmentTournamentStore(new BracketBuilder());
+        var actor = Principal(TournamentRoles.Owner);
+        var created = await store.CreateAsync(new CreateTournamentInput
+        {
+            Name = "Link-only Community Open", Venue = "Corner Pocket", StartsAtLocal = DateTime.Today.AddDays(1)
+        }, actor);
+        Assert.True(await store.TransitionAsync(new TransitionTournamentInput { TournamentId = created.Id, ToStatus = TournamentStatus.RegistrationOpen, Reason = "Registration ready" }, actor));
+        Assert.False((await store.ActivateLiveLinkAsync(new ActivateLiveTournamentLinkInput { TournamentId = created.Id }, Principal(TournamentRoles.Scorekeeper))).Succeeded);
+        Assert.False((await store.ActivateLiveLinkAsync(new ActivateLiveTournamentLinkInput { TournamentId = created.Id, LifetimeHours = 169 }, actor)).Succeeded);
+
+        var activation = await store.ActivateLiveLinkAsync(new ActivateLiveTournamentLinkInput { TournamentId = created.Id, LifetimeHours = 24 }, actor);
+
+        Assert.True(activation.Succeeded);
+        Assert.NotNull(activation.Code);
+        Assert.DoesNotContain((await store.GetDirectoryAsync()).Upcoming, item => item.Id == created.Id);
+        Assert.Equal(created.Id, (await store.FindByLiveCodeAsync(activation.Code!))?.Id);
+        var metadata = await store.GetLiveLinkAsync(created.Id);
+        Assert.NotNull(metadata);
+        Assert.Equal(activation.Code![^4..], metadata.CodeHint);
+        Assert.DoesNotContain(activation.Code, metadata.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    // Locks rotation, explicit revocation, and archival to the same fail-closed public lookup behavior.
+    public async Task RotatedDeactivatedAndArchivedLiveLinksStopResolving()
+    {
+        var store = new DevelopmentTournamentStore(new BracketBuilder());
+        var actor = Principal(TournamentRoles.Owner);
+        var created = await store.CreateAsync(new CreateTournamentInput { Name = "Venue Display", Venue = "Pool Room", StartsAtLocal = DateTime.Today.AddDays(1) }, actor);
+        Assert.True(await store.TransitionAsync(new TransitionTournamentInput { TournamentId = created.Id, ToStatus = TournamentStatus.RegistrationOpen, Reason = "Registration ready" }, actor));
+        var first = await store.ActivateLiveLinkAsync(new ActivateLiveTournamentLinkInput { TournamentId = created.Id }, actor);
+        var second = await store.ActivateLiveLinkAsync(new ActivateLiveTournamentLinkInput { TournamentId = created.Id }, actor);
+        Assert.Null(await store.FindByLiveCodeAsync(first.Code!));
+        Assert.NotNull(await store.FindByLiveCodeAsync(second.Code!));
+
+        Assert.True((await store.DeactivateLiveLinkAsync(new DeactivateLiveTournamentLinkInput { TournamentId = created.Id }, actor)).Succeeded);
+        Assert.Null(await store.FindByLiveCodeAsync(second.Code!));
+        var third = await store.ActivateLiveLinkAsync(new ActivateLiveTournamentLinkInput { TournamentId = created.Id }, actor);
+        Assert.True(await store.TransitionAsync(new TransitionTournamentInput { TournamentId = created.Id, ToStatus = TournamentStatus.Archived, Reason = "Event retained" }, actor));
+        Assert.Null(await store.FindByLiveCodeAsync(third.Code!));
+        Assert.Contains((await store.GetAuditAsync(created.Id)), entry => entry.Action == "live_link_activated");
+        Assert.Contains((await store.GetAuditAsync(created.Id)), entry => entry.Action == "live_link_deactivated");
+    }
+
+    [Fact]
+    // Rejects malformed locators before lookup and keeps QR rendering local and self-contained.
+    public void LiveCodeAndQrContractsAreBounded()
+    {
+        var codes = Enumerable.Range(0, 256).Select(_ => LiveTournamentLinks.GenerateCode()).ToArray();
+        Assert.Equal(codes.Length, codes.Distinct(StringComparer.Ordinal).Count());
+        Assert.All(codes, code => Assert.True(LiveTournamentLinks.TryHash(code, out var hash) && hash.Length == 32));
+        Assert.False(LiveTournamentLinks.TryHash("guess-me", out _));
+        Assert.False(new LiveTournamentLink(Guid.NewGuid(), Guid.NewGuid(), "89AB", DateTimeOffset.UtcNow.AddHours(-2), DateTimeOffset.UtcNow.AddHours(-1)).IsActiveAt(DateTimeOffset.UtcNow));
+        Assert.StartsWith("data:image/svg+xml;base64,", LiveTournamentLinks.CreateQrSvgDataUri("https://tournaments.example.test/live/23456789AB"), StringComparison.Ordinal);
+        var reveals = new LiveLinkRevealStore();
+        var revealId = reveals.Hold(codes[0]);
+        Assert.Equal(codes[0], reveals.Take(revealId));
+        Assert.Null(reveals.Take(revealId));
+        var cachePolicy = Assert.Single(typeof(TournamentsController).GetMethod(nameof(TournamentsController.Live))!
+            .GetCustomAttributes(typeof(ResponseCacheAttribute), false).Cast<ResponseCacheAttribute>());
+        Assert.True(cachePolicy.NoStore);
+    }
+
+    [Fact]
     // Avoids recording an unintended instant when local wall clocks skip or repeat an hour.
     public void DaylightSavingGapAndOverlapRequireAnExplicitDifferentTime()
     {

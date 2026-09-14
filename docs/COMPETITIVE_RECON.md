@@ -115,6 +115,8 @@ Source: https://playpass.com/sports-software/tournament-scheduler
   few minutes; advanced format and rules options unfold only when needed.
 - The public phone view prioritizes “where do I play, against whom, and when?”
   before the full bracket.
+- Temporary venue-display sharing uses a short live address and local QR code
+  without forcing directory publication (implemented in 0.5.0).
 - Tournament directors need an operations queue: waiting matches, available
   tables, conflicts, delayed players, and the next safe action.
 - Never force an Account, League membership, rating, or Professional Player

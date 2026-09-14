@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0 — Unreleased
+
+- Added auditable temporary Live Tournament Links with cryptographically random
+  ten-character addresses, one-way SHA-256 storage, bounded expiry, rotation,
+  manual revocation, and automatic archival revocation.
+- Added anonymous read-only `/live/{code}` tournament views without changing
+  permanent visibility or directory discovery.
+- Added one-time organizer copy controls and self-contained local SVG QR codes;
+  no external QR service receives a Tournament address.
+- Added migration `005_live_tournament_links.sql`, focused lifecycle/security
+  tests, and synchronized Help, operations, schema, deployment, and launch
+  documentation.
+- League, Account, DNS, Sandbox, Production, secrets, tags, and releases remain
+  unchanged.
+
 ## 0.4.0 — Unreleased
 
 - Added single-cycle round-robin scheduling for even and odd fields with live,

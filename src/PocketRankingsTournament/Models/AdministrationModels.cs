@@ -53,7 +53,29 @@ public sealed record OrganizerTournamentViewModel(
     IReadOnlyList<TournamentTable> Tables,
     IReadOnlyList<TournamentStatusChange> StatusHistory,
     IReadOnlyList<TournamentAuditEntry> AuditEntries,
-    IReadOnlyList<TournamentStatus> AvailableTransitions);
+    IReadOnlyList<TournamentStatus> AvailableTransitions,
+    LiveTournamentLink? LiveLink,
+    string? RevealedLiveUrl = null,
+    string? RevealedLiveQrSvg = null);
+
+// Exposes safe operational metadata without retaining or redisplaying the usable live code.
+public sealed record LiveTournamentLink(
+    Guid Id,
+    Guid TournamentId,
+    string CodeHint,
+    DateTimeOffset ActivatedAt,
+    DateTimeOffset ExpiresAt,
+    DateTimeOffset? RevokedAt = null)
+{
+    public bool IsActiveAt(DateTimeOffset instant) => RevokedAt is null && ExpiresAt > instant;
+}
+
+// Returns the raw code exactly once so an organizer can copy or print it before only the hash remains.
+public sealed record LiveTournamentLinkActivationResult(bool Succeeded, string Message, string? Code = null)
+{
+    public static LiveTournamentLinkActivationResult Success(string message, string code) => new(true, message, code);
+    public static LiveTournamentLinkActivationResult Failure(string message) => new(false, message);
+}
 
 // Bounds the operational choices that define a bracket before registrations begin.
 public sealed class CreateCompetitionInput
@@ -239,4 +261,25 @@ public sealed class UpdateTournamentVisibilityInput
 
     [Required, StringLength(500, MinimumLength = 3)]
     public string Reason { get; set; } = "";
+}
+
+// Bounds temporary publication so a forgotten venue link cannot remain active indefinitely.
+public sealed class ActivateLiveTournamentLinkInput
+{
+    public Guid TournamentId { get; set; }
+
+    [Range(1, 168)]
+    public int LifetimeHours { get; set; } = 72;
+
+    [Required, StringLength(500, MinimumLength = 3)]
+    public string Reason { get; set; } = "Live tournament display approved";
+}
+
+// Requires an auditable explanation when a venue display link is ended before its expiry.
+public sealed class DeactivateLiveTournamentLinkInput
+{
+    public Guid TournamentId { get; set; }
+
+    [Required, StringLength(500, MinimumLength = 3)]
+    public string Reason { get; set; } = "Live tournament display ended";
 }

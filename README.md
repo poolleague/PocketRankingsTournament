@@ -27,12 +27,16 @@ does not implement or store passwords. See `AGENTS.md` for repo-specific rules,
 `docs/COMPETITIVE_RECON.md` for the product research behind the roadmap.
 
 Single elimination, double elimination, and single-cycle round robin are the
-operational competition engines in version 0.4.0. Directors can run table
+operational competition engines in version 0.5.0. Directors can run table
 calls, publish payouts for display, correct dependent bracket paths with
-retained evidence, print the public draw, and export safe local records. Swiss
+retained evidence, print the public draw, export safe local records, and issue
+temporary `/live/{code}` venue-display links with locally generated QR codes.
+Only a one-way hash of each short code is retained; links expire, can be
+rotated or revoked, and end automatically on archival. Swiss
 and group-to-finals remain modeled roadmap formats; the application refuses to
 generate them rather than producing an incorrect schedule.
 
 Start with `docs/OPERATIONS.md` for the tournament-day workflow and
 `docs/LAUNCH_CHECKLIST.md` for the remaining environment decisions and launch
-gate. No DNS or deployment has been configured.
+gate. Runtime dependency purpose and licensing are recorded in
+`docs/THIRD_PARTY.md`. No DNS or deployment has been configured.

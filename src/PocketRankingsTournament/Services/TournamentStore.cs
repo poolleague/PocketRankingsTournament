@@ -18,6 +18,14 @@ public interface ITournamentStore
     Task<bool> TransitionAsync(TransitionTournamentInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     // Changes public discoverability independently from the one-way operational lifecycle.
     Task<OperationResult> UpdateVisibilityAsync(UpdateTournamentVisibilityInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    // Returns only safe live-link metadata; the usable code is never recoverable from storage.
+    Task<LiveTournamentLink?> GetLiveLinkAsync(Guid eventId, CancellationToken cancellationToken = default);
+    // Rotates any earlier venue link and reveals the newly generated code exactly once.
+    Task<LiveTournamentLinkActivationResult> ActivateLiveLinkAsync(ActivateLiveTournamentLinkInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    // Revokes the current live link without changing permanent tournament history.
+    Task<OperationResult> DeactivateLiveLinkAsync(DeactivateLiveTournamentLinkInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    // Resolves a valid anonymous venue code without widening normal tournament visibility.
+    Task<TournamentEvent?> FindByLiveCodeAsync(string code, CancellationToken cancellationToken = default);
     // Preserves the full readable state-transition narrative for retained events.
     Task<IReadOnlyList<TournamentStatusChange>> GetStatusHistoryAsync(Guid id, CancellationToken cancellationToken = default);
     // Returns redacted mutation evidence without exposing provider or session identifiers.
@@ -110,6 +118,8 @@ public sealed partial class DevelopmentTournamentStore : ITournamentStore
     private readonly Dictionary<Guid, List<TournamentStatusChange>> _history = new();
     private readonly Dictionary<Guid, List<TournamentAuditEntry>> _audit = new();
     private readonly Dictionary<Guid, List<TournamentTable>> _tables = new();
+    private readonly Dictionary<Guid, (LiveTournamentLink Link, byte[] Hash)> _liveLinks = new();
+    private readonly HashSet<string> _issuedLiveLinkHashes = new(StringComparer.Ordinal);
     private readonly BracketBuilder _bracketBuilder;
 
     // Provides fictional local state only when no PostgreSQL connection exists; Production never registers this store.
@@ -213,6 +223,10 @@ public sealed partial class DevelopmentTournamentStore : ITournamentStore
 
             var before = _events[index];
             _events[index] = before with { Status = input.ToStatus };
+            if (input.ToStatus == TournamentStatus.Archived && _liveLinks.TryGetValue(input.TournamentId, out var live))
+            {
+                _liveLinks[input.TournamentId] = (live.Link with { RevokedAt = DateTimeOffset.UtcNow }, live.Hash);
+            }
             _history[input.TournamentId].Add(new TournamentStatusChange(
                 before.Status,
                 input.ToStatus,
@@ -237,6 +251,70 @@ public sealed partial class DevelopmentTournamentStore : ITournamentStore
             _events[index] = _events[index] with { Visibility = input.ToVisibility };
             _audit[input.TournamentId].Add(NewAudit(actor, "tournament_visibility_changed", input.TournamentId, input.Reason.Trim()));
             return Task.FromResult(OperationResult.Success($"Tournament visibility changed to {input.ToVisibility.ToString().ToLowerInvariant()}."));
+        }
+    }
+
+    // Keeps the raw venue code out of organizer history after its one-time reveal.
+    public Task<LiveTournamentLink?> GetLiveLinkAsync(Guid eventId, CancellationToken cancellationToken = default)
+    {
+        lock (_sync)
+        {
+            return Task.FromResult(_liveLinks.TryGetValue(eventId, out var stored) ? stored.Link : null);
+        }
+    }
+
+    // Mirrors the durable rotation transaction while preventing even theoretical duplicate development codes.
+    public Task<LiveTournamentLinkActivationResult> ActivateLiveLinkAsync(ActivateLiveTournamentLinkInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        if (!CanManage(actor, input.TournamentId)) return Task.FromResult(LiveTournamentLinkActivationResult.Failure("Live-link access is unavailable."));
+        if (input.LifetimeHours is < 1 or > 168) return Task.FromResult(LiveTournamentLinkActivationResult.Failure("Live links must last between 1 and 168 hours."));
+        lock (_sync)
+        {
+            var tournament = _events.SingleOrDefault(item => item.Id == input.TournamentId);
+            if (tournament is null || tournament.Status is TournamentStatus.Draft or TournamentStatus.Archived)
+                return Task.FromResult(LiveTournamentLinkActivationResult.Failure("Open registration before activating a live link; archived tournaments cannot be reactivated."));
+
+            string code;
+            byte[] hash;
+            do
+            {
+                code = LiveTournamentLinks.GenerateCode();
+                LiveTournamentLinks.TryHash(code, out hash);
+            } while (_issuedLiveLinkHashes.Contains(Convert.ToHexString(hash)));
+
+            var now = DateTimeOffset.UtcNow;
+            var link = new LiveTournamentLink(Guid.NewGuid(), input.TournamentId, code[^4..], now, now.AddHours(input.LifetimeHours));
+            _liveLinks[input.TournamentId] = (link, hash);
+            _issuedLiveLinkHashes.Add(Convert.ToHexString(hash));
+            _audit[input.TournamentId].Add(NewAudit(actor, "live_link_activated", input.TournamentId, input.Reason.Trim()));
+            return Task.FromResult(LiveTournamentLinkActivationResult.Success("Live tournament link activated. Copy or print it now; rotating it invalidates the earlier address.", code));
+        }
+    }
+
+    // Ends anonymous venue access immediately while preserving the link metadata and audit record.
+    public Task<OperationResult> DeactivateLiveLinkAsync(DeactivateLiveTournamentLinkInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        if (!CanManage(actor, input.TournamentId)) return Task.FromResult(OperationResult.Failure("Live-link access is unavailable."));
+        lock (_sync)
+        {
+            if (!_liveLinks.TryGetValue(input.TournamentId, out var stored) || stored.Link.RevokedAt is not null)
+                return Task.FromResult(OperationResult.Failure("No active live tournament link was found."));
+            _liveLinks[input.TournamentId] = (stored.Link with { RevokedAt = DateTimeOffset.UtcNow }, stored.Hash);
+            _audit[input.TournamentId].Add(NewAudit(actor, "live_link_deactivated", input.TournamentId, input.Reason.Trim()));
+            return Task.FromResult(OperationResult.Success("Live tournament link deactivated."));
+        }
+    }
+
+    // Applies code, time, and lifecycle checks together so expired or archived links reveal no event details.
+    public Task<TournamentEvent?> FindByLiveCodeAsync(string code, CancellationToken cancellationToken = default)
+    {
+        if (!LiveTournamentLinks.TryHash(code, out var hash)) return Task.FromResult<TournamentEvent?>(null);
+        lock (_sync)
+        {
+            var stored = _liveLinks.Values.SingleOrDefault(item => item.Hash.SequenceEqual(hash));
+            if (stored.Link is null || !stored.Link.IsActiveAt(DateTimeOffset.UtcNow)) return Task.FromResult<TournamentEvent?>(null);
+            var tournament = _events.SingleOrDefault(item => item.Id == stored.Link.TournamentId);
+            return Task.FromResult(tournament is { Status: not TournamentStatus.Draft and not TournamentStatus.Archived } ? tournament : null);
         }
     }
 
@@ -402,6 +480,17 @@ public sealed partial class PostgresTournamentStore : ITournamentStore
             await update.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        if (input.ToStatus == TournamentStatus.Archived)
+        {
+            // Archival ends every venue-display address in the same transaction as the irreversible lifecycle move.
+            await using var revokeLinks = new NpgsqlCommand("""
+                UPDATE tourn.event_live_links SET revoked_at=CURRENT_TIMESTAMP
+                WHERE event_id=(SELECT event_id FROM tourn.events WHERE public_uuid=@id) AND revoked_at IS NULL
+                """, connection, transaction);
+            revokeLinks.Parameters.AddWithValue("id", input.TournamentId);
+            await revokeLinks.ExecuteNonQueryAsync(cancellationToken);
+        }
+
         await using (var history = new NpgsqlCommand("""
             INSERT INTO tourn.event_status_history
                 (event_id, from_status, to_status, actor_display_name, actor_role, reason)
@@ -435,6 +524,104 @@ public sealed partial class PostgresTournamentStore : ITournamentStore
         await InsertAuditAsync(connection, transaction, actor, "tournament_visibility_changed", input.TournamentId, input.Reason.Trim(), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return OperationResult.Success($"Tournament visibility changed to {input.ToVisibility.ToString().ToLowerInvariant()}.");
+    }
+
+    // Projects only the non-secret suffix and lifecycle timestamps required by the organizer page.
+    public async Task<LiveTournamentLink?> GetLiveLinkAsync(Guid eventId, CancellationToken cancellationToken = default)
+    {
+        await using var command = _dataSource.CreateCommand("""
+            SELECT l.public_uuid, l.code_hint, l.activated_at, l.expires_at, l.revoked_at
+            FROM tourn.event_live_links l
+            JOIN tourn.events e ON e.event_id = l.event_id
+            WHERE e.public_uuid = @id
+            ORDER BY l.activated_at DESC, l.event_live_link_id DESC
+            LIMIT 1
+            """);
+        command.Parameters.AddWithValue("id", eventId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken)
+            ? new LiveTournamentLink(reader.GetGuid(0), eventId, reader.GetString(1).Trim(), reader.GetFieldValue<DateTimeOffset>(2),
+                reader.GetFieldValue<DateTimeOffset>(3), reader.IsDBNull(4) ? null : reader.GetFieldValue<DateTimeOffset>(4))
+            : null;
+    }
+
+    // Revokes the previous address and inserts one collision-checked hash in the same audited transaction.
+    public async Task<LiveTournamentLinkActivationResult> ActivateLiveLinkAsync(ActivateLiveTournamentLinkInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        if (!DevelopmentTournamentStore.CanManage(actor, input.TournamentId)) return LiveTournamentLinkActivationResult.Failure("Live-link access is unavailable.");
+        if (input.LifetimeHours is < 1 or > 168) return LiveTournamentLinkActivationResult.Failure("Live links must last between 1 and 168 hours.");
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        long eventId;
+        string status;
+        await using (var read = new NpgsqlCommand("SELECT event_id,status FROM tourn.events WHERE public_uuid=@id FOR UPDATE", connection, transaction))
+        {
+            read.Parameters.AddWithValue("id", input.TournamentId);
+            await using var reader = await read.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken)) return LiveTournamentLinkActivationResult.Failure("Tournament not found.");
+            eventId = reader.GetInt64(0); status = reader.GetString(1);
+        }
+        if (ParseStatus(status) is TournamentStatus.Draft or TournamentStatus.Archived)
+            return LiveTournamentLinkActivationResult.Failure("Open registration before activating a live link; archived tournaments cannot be reactivated.");
+
+        await using (var revoke = new NpgsqlCommand("UPDATE tourn.event_live_links SET revoked_at=CURRENT_TIMESTAMP WHERE event_id=@event_id AND revoked_at IS NULL", connection, transaction))
+        {
+            revoke.Parameters.AddWithValue("event_id", eventId);
+            await revoke.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        string? code = null;
+        for (var attempt = 0; attempt < 5 && code is null; attempt++)
+        {
+            var candidate = LiveTournamentLinks.GenerateCode();
+            LiveTournamentLinks.TryHash(candidate, out var hash);
+            await using var insert = new NpgsqlCommand("""
+                INSERT INTO tourn.event_live_links (public_uuid,event_id,token_hash,code_hint,expires_at)
+                VALUES (@uuid,@event_id,@hash,@hint,CURRENT_TIMESTAMP + (@hours * INTERVAL '1 hour'))
+                ON CONFLICT (token_hash) DO NOTHING
+                RETURNING event_live_link_id
+                """, connection, transaction);
+            insert.Parameters.AddWithValue("uuid", Guid.NewGuid()); insert.Parameters.AddWithValue("event_id", eventId);
+            insert.Parameters.AddWithValue("hash", hash); insert.Parameters.AddWithValue("hint", candidate[^4..]); insert.Parameters.AddWithValue("hours", input.LifetimeHours);
+            if (await insert.ExecuteScalarAsync(cancellationToken) is not null) code = candidate;
+        }
+        if (code is null) { await transaction.RollbackAsync(cancellationToken); return LiveTournamentLinkActivationResult.Failure("A unique live link could not be generated. Try again."); }
+        await InsertAuditAsync(connection, transaction, actor, "live_link_activated", input.TournamentId, input.Reason.Trim(), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return LiveTournamentLinkActivationResult.Success("Live tournament link activated. Copy or print it now; rotating it invalidates the earlier address.", code);
+    }
+
+    // Revokes only this event's current address and commits matching evidence atomically.
+    public async Task<OperationResult> DeactivateLiveLinkAsync(DeactivateLiveTournamentLinkInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        if (!DevelopmentTournamentStore.CanManage(actor, input.TournamentId)) return OperationResult.Failure("Live-link access is unavailable.");
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var update = new NpgsqlCommand("""
+            UPDATE tourn.event_live_links SET revoked_at=CURRENT_TIMESTAMP
+            WHERE event_id=(SELECT event_id FROM tourn.events WHERE public_uuid=@id) AND revoked_at IS NULL
+            """, connection, transaction);
+        update.Parameters.AddWithValue("id", input.TournamentId);
+        if (await update.ExecuteNonQueryAsync(cancellationToken) == 0) return OperationResult.Failure("No active live tournament link was found.");
+        await InsertAuditAsync(connection, transaction, actor, "live_link_deactivated", input.TournamentId, input.Reason.Trim(), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return OperationResult.Success("Live tournament link deactivated.");
+    }
+
+    // Matches a one-way hash and enforces expiry and event lifecycle inside PostgreSQL before loading public details.
+    public async Task<TournamentEvent?> FindByLiveCodeAsync(string code, CancellationToken cancellationToken = default)
+    {
+        if (!LiveTournamentLinks.TryHash(code, out var hash)) return null;
+        await using var command = _dataSource.CreateCommand("""
+            SELECT e.public_uuid
+            FROM tourn.event_live_links l
+            JOIN tourn.events e ON e.event_id=l.event_id
+            WHERE l.token_hash=@hash AND l.revoked_at IS NULL AND l.expires_at>CURRENT_TIMESTAMP
+              AND e.status NOT IN ('draft','archived')
+            """);
+        command.Parameters.AddWithValue("hash", hash);
+        var id = await command.ExecuteScalarAsync(cancellationToken);
+        return id is Guid eventId ? await FindAsync(eventId, cancellationToken) : null;
     }
 
     // Reads immutable lifecycle evidence separately from the mutable current-event projection.

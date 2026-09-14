@@ -1,6 +1,6 @@
 # Tournament Operations Guide
 
-Version: 0.4.0 · updated 2026-09-14
+Version: 0.5.0 · updated 2026-09-14
 
 This guide is for volunteer directors running a local pool event. Tournament
 stores no participant contact information and does not require a League,
@@ -19,6 +19,9 @@ Account, or Player Profile record for someone to compete.
    the draw; Pocket Rankings does not collect or hold funds.
 6. Choose Private, Unlisted, or Public visibility. Only Public events appear in
    the directory. Unlisted events work through their direct UUID link.
+7. After registration opens, activate a Live Tournament Link for 24 hours,
+   three days, or seven days. Copy the one-time address or print its locally
+   generated QR code immediately. Rotating it invalidates the earlier address.
 
 ## Check-in and draw
 
@@ -49,6 +52,12 @@ draw. For each playable match:
 Round-robin standings rank wins, score difference, score-for, then display
 name. The table is derived from confirmed results and updates without a second
 editable standing record.
+
+The Live Tournament Link is read-only and can be displayed on a venue screen
+or opened by anyone who scans its QR code. Deactivate it early if the address
+is shared incorrectly. It expires automatically; archiving the event also
+ends it immediately. Permanent completed results use the normal tournament
+address and visibility setting.
 
 ## Corrections and completion
 

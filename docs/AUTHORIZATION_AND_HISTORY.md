@@ -1,6 +1,6 @@
 # Authorization, Entitlement, And History Contract
 
-Version: Tournament 0.4.0 · 2026-09-14
+Version: Tournament 0.5.0 · 2026-09-14
 
 ## Product boundary
 
@@ -74,6 +74,18 @@ directory, and Public is discoverable. Complete Public events remain on the
 public history surface; Archived events remain available only to authorized
 organizers and cannot be republished.
 
+An authorized Owner or assigned Tournament Director may activate a separate
+temporary Live Tournament Link only after registration opens. It grants
+anonymous read-only access at `/live/{code}` even when the event is Private or
+Unlisted; it never grants organizer access or changes directory visibility.
+Codes are random, purpose-bound to one event, stored only as SHA-256 hashes,
+shown once, and limited to 1–168 hours. Rotation revokes the earlier address,
+manual deactivation ends it immediately, and archival revokes it in the same
+lifecycle transaction. Malformed, unknown, expired, revoked, draft, and
+archived lookups return the same not-found response.
+Live-link responses are marked no-store so a browser or intermediary does not
+retain the temporary view after expiry or revocation.
+
 ## History and correction policy
 
 - Published tournaments are never hard-deleted by an organizer workflow.
@@ -89,7 +101,7 @@ organizers and cannot be republished.
   unaffected opponents remain in place, and stale score forms are invalidated.
 - Authenticated mutations append redacted `audit.entries` evidence. A database
   trigger rejects update or delete of audit rows.
-- Version 0.4.0 performs no automatic history purge. A later approved privacy
+- Version 0.5.0 performs no automatic history purge. A later approved privacy
   phase may unlink or anonymize identity while preserving the factual event,
   bracket, score, and placement record.
 
@@ -100,7 +112,8 @@ privacy policy requires a separately approved legal/product decision.
 ## Recovery
 
 The `002_administration_history.sql`, `003_competition_operations.sql`, and
-`004_launch_operations.sql` migrations are additive and idempotent.
+`004_launch_operations.sql`, and `005_live_tournament_links.sql` migrations
+are additive and idempotent.
 Forward recovery is preferred after a failed application rollout. Before any
 deployed schema change, preserve a named protected backup and exact application
 image. Never roll back by dropping history tables or deleting the product-local

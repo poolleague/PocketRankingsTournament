@@ -19,7 +19,7 @@ different Compose projects with different credentials, volumes, and networks.
    `healthy`. A Production process without `TournamentDatabase` must fail to
    start rather than serve fictional state.
 6. Confirm the initializer applied `001_initial_schema.sql` through
-   `004_launch_operations.sql`; apply all four a second time and verify they
+   `005_live_tournament_links.sql`; apply all five a second time and verify they
    succeed without changing retained records.
 7. Create a fictional Development tournament, restart only the application
    container, and verify the tournament, lifecycle history, and audit evidence
@@ -28,7 +28,8 @@ different Compose projects with different credentials, volumes, and networks.
 ## Recovery and rollback
 
 Migrations `002_administration_history.sql`,
-`003_competition_operations.sql`, and `004_launch_operations.sql` are additive.
+`003_competition_operations.sql`, `004_launch_operations.sql`, and
+`005_live_tournament_links.sql` are additive.
 Their forward-recovery
 path is to correct and reapply the idempotent migration; it must not drop
 history tables after they contain records. Before any future schema deployment,
@@ -43,6 +44,8 @@ proxy will terminate public TLS and join only this product's network. The
 PostgreSQL service exposes no host port. Production exposes no local
 administrator login. Administrative authorization
 must remain unavailable there until the separate Account handoff is approved
-and configured. No Sandbox, DNS, Caddy route, secret, or Production deployment
-is approved for version 0.4.0. DNS has not been updated for Tournament. Follow
+and configured. The reverse proxy must preserve the original HTTPS scheme and
+host so one-time live addresses and QR codes use the public origin. No Sandbox,
+DNS, Caddy route, secret, or Production deployment is approved for version
+0.5.0. DNS has not been updated for Tournament. Follow
 `LAUNCH_CHECKLIST.md`; passing code checks does not authorize deployment.

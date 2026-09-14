@@ -11,11 +11,13 @@ namespace PocketRankingsTournament.Controllers;
 public sealed class OrganizerController : Controller
 {
     private readonly ITournamentStore _store;
+    private readonly LiveLinkRevealStore _liveLinkReveals;
 
     // Keeps authenticated operations separate from the public read-only tournament surface.
-    public OrganizerController(ITournamentStore store)
+    public OrganizerController(ITournamentStore store, LiveLinkRevealStore liveLinkReveals)
     {
         _store = store;
+        _liveLinkReveals = liveLinkReveals;
     }
 
     [HttpGet("/organizer")]
@@ -68,6 +70,12 @@ public sealed class OrganizerController : Controller
             return NotFound();
         }
 
+        var revealedCode = TempData["LiveLinkRevealId"] is string revealText && Guid.TryParseExact(revealText, "N", out var revealId)
+            ? _liveLinkReveals.Take(revealId)
+            : null;
+        var revealedUrl = revealedCode is null
+            ? null
+            : Url.Action("Live", "Tournaments", new { code = revealedCode }, Request.Scheme);
         return View(new OrganizerTournamentViewModel(
             tournament,
             await _store.GetTablesAsync(id, cancellationToken),
@@ -77,7 +85,10 @@ public sealed class OrganizerController : Controller
                 .Where(next => next != TournamentStatus.CheckIn || tournament.Competitions.Count > 0)
                 .Where(next => next != TournamentStatus.InProgress || (tournament.Competitions.Count > 0 && tournament.Competitions.All(item => item.DrawRevision > 0)))
                 .Where(next => next != TournamentStatus.Complete || (tournament.Competitions.Count > 0 && tournament.Competitions.All(item => item.Status == CompetitionStatus.Complete)))
-                .ToArray()));
+                .ToArray(),
+            await _store.GetLiveLinkAsync(id, cancellationToken),
+            revealedUrl,
+            revealedUrl is null ? null : LiveTournamentLinks.CreateQrSvgDataUri(revealedUrl)));
     }
 
     [Authorize(Policy = TournamentPolicies.ManageTournaments)]
@@ -108,6 +119,35 @@ public sealed class OrganizerController : Controller
         var result = TournamentEventAccess.CanAccess(User, id) && ModelState.IsValid
             ? await _store.UpdateVisibilityAsync(input, User, cancellationToken)
             : OperationResult.Failure("Visibility details are incomplete or access is unavailable.");
+        TempData[result.Succeeded ? "Notice" : "Error"] = result.Message;
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    [Authorize(Policy = TournamentPolicies.ManageTournaments)]
+    [HttpPost("/organizer/tournaments/{id:guid}/live-link")]
+    [ValidateAntiForgeryToken]
+    // Reveals a newly rotated public locator once while retaining only its hash after this response.
+    public async Task<IActionResult> ActivateLiveLink(Guid id, ActivateLiveTournamentLinkInput input, CancellationToken cancellationToken)
+    {
+        input.TournamentId = id;
+        var result = TournamentEventAccess.CanAccess(User, id) && ModelState.IsValid
+            ? await _store.ActivateLiveLinkAsync(input, User, cancellationToken)
+            : LiveTournamentLinkActivationResult.Failure("Live-link details are incomplete or access is unavailable.");
+        TempData[result.Succeeded ? "Notice" : "Error"] = result.Message;
+        if (result.Succeeded && result.Code is not null) TempData["LiveLinkRevealId"] = _liveLinkReveals.Hold(result.Code).ToString("N");
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    [Authorize(Policy = TournamentPolicies.ManageTournaments)]
+    [HttpPost("/organizer/tournaments/{id:guid}/live-link/deactivate")]
+    [ValidateAntiForgeryToken]
+    // Ends anonymous display access independently from permanent tournament history and visibility.
+    public async Task<IActionResult> DeactivateLiveLink(Guid id, DeactivateLiveTournamentLinkInput input, CancellationToken cancellationToken)
+    {
+        input.TournamentId = id;
+        var result = TournamentEventAccess.CanAccess(User, id) && ModelState.IsValid
+            ? await _store.DeactivateLiveLinkAsync(input, User, cancellationToken)
+            : OperationResult.Failure("Live-link details are incomplete or access is unavailable.");
         TempData[result.Succeeded ? "Notice" : "Error"] = result.Message;
         return RedirectToAction(nameof(Details), new { id });
     }

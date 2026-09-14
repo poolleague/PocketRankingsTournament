@@ -8,6 +8,7 @@ Last verified: 2026-09-14 (America/New_York)
 - Branch: `codex/tournament-foundation`
 - Competition-operations phase baseline: `e5907b8`
 - Launch-readiness phase baseline: `13a42d0`
+- Live-link phase baseline: `c722300`
 - Owner approved the shared Platform rules and the initial Tournament
   foundation on 2026-09-13.
 - Owner approved the Tournament-only administration/history phase on
@@ -65,11 +66,28 @@ Last verified: 2026-09-14 (America/New_York)
 - Additive migration `004_launch_operations.sql` labels confirmed versus
   downstream-reset result revisions. No League, Account, DNS, Sandbox,
   Production, secret, tag, or release state changed.
+- On 2026-09-14 the owner approved the Tournament-only Live Tournament Link
+  phase: temporary anonymous display addresses, one-time copy/QR reveal,
+  expiration, rotation, revocation, archival shutdown, migration, tests,
+  documentation, commit, and push. League, DNS, and deployment remain excluded.
+- Version 0.5.0 adds `/live/{code}` read-only event views backed by random
+  ten-character codes whose SHA-256 hashes alone are retained. Owners and
+  assigned Tournament Directors may activate 1–168 hour links after
+  registration opens. Rotation and manual revocation are audited; archival
+  revokes the active link in the lifecycle transaction. QR SVG is generated
+  locally without disclosing the address to a third-party service.
+- Additive migration `005_live_tournament_links.sql` retains safe link metadata
+  and enforces unique hashes plus one non-revoked link per event.
 
 ## Current validation
 
 - Release build: PASS, zero warnings/errors.
-- Automated tests: PASS, 53/53.
+- Automated tests: PASS, 57/57.
+- Version 0.5.0 browser: activation reveals one copyable address and local QR,
+  refresh removes the full code, anonymous viewing after sign-out PASS, 390px
+  live/organizer layouts fit without document overflow, manual deactivation
+  records audit evidence, and the revoked and malformed addresses return 404.
+  Browser console errors are empty.
 - Docker Compose configuration: PASS with a local placeholder supplied only to
   the validation process.
 - Browser: public directory and bracket render; no browser console errors;

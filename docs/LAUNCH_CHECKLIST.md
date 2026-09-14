@@ -1,6 +1,6 @@
 # Tournament Launch Checklist
 
-Version: 0.4.0 candidate · updated 2026-09-14
+Version: 0.5.0 candidate · updated 2026-09-14
 
 Passing this checklist provides evidence for an owner launch decision. It does
 not itself authorize DNS, secrets, Sandbox, Production, tags, or a public
@@ -28,7 +28,7 @@ GitHub Release.
   tests; the dependency advisory scan reports no vulnerable packages.
 - [ ] Compose configuration resolves with a process-only fictional validation
   password and exposes PostgreSQL on no host port.
-- [ ] All migrations `001` through `004` apply twice to a fresh isolated
+- [ ] All migrations `001` through `005` apply twice to a fresh isolated
   PostgreSQL container and the migration ledger contains each exactly once.
 - [ ] Create a Tournament record, restart only the app container, and confirm
   event, draw, result revisions, status history, payouts, and audit evidence
@@ -42,6 +42,9 @@ GitHub Release.
 - [ ] Anonymous organizer access, missing/expired entitlement, wrong event,
   wrong match, wildcard forgery, missing CSRF, stale result, private UUID, and
   archived publication attempts all fail safely.
+- [ ] Live-link code is absent from PostgreSQL/audit evidence; activation,
+  copy, local QR, anonymous viewing, expiry, rotation, manual revocation, and
+  archival revocation pass, with uniform 404 responses for invalid links.
 - [ ] Owner, assigned Director, and assigned Scorekeeper workflows pass at
   desktop, tablet, and 390px phone sizes with keyboard navigation, visible
   focus, no horizontal document overflow, no console errors, and a readable
@@ -51,8 +54,8 @@ GitHub Release.
 - [ ] A bounded local concurrency smoke run keeps health responsive and creates
   no duplicate results or overlapping active table assignments.
 - [ ] README, Help, code outline, database, authorization/history, testing,
-  deployment, version, changelog, and current release handoff match the exact
-  candidate.
+  deployment, third-party inventory, version, changelog, and current release
+  handoff match the exact candidate.
 
 ## Owner-gated promotion
 
