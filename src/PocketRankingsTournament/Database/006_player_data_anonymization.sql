@@ -11,9 +11,12 @@ CREATE TABLE IF NOT EXISTS privacy.identity_suppressions (
 
 CREATE TABLE IF NOT EXISTS privacy.anonymization_receipts (
     request_id uuid PRIMARY KEY,
+    token_id uuid NOT NULL UNIQUE,
     participants_anonymized integer NOT NULL CHECK (participants_anonymized >= 0),
     completed_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE privacy.anonymization_receipts ADD COLUMN IF NOT EXISTS token_id uuid;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_anonymization_receipt_token ON privacy.anonymization_receipts(token_id) WHERE token_id IS NOT NULL;
 
 -- Audit remains append-only except inside the single transaction that removes the opted-out person's identifiers.
 CREATE OR REPLACE FUNCTION audit.reject_entry_mutation()

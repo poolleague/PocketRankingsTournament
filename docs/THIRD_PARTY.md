@@ -1,6 +1,6 @@
 # Third-Party Runtime Components
 
-Version: Tournament 0.6.0 · updated 2026-09-15
+Version: Tournament 0.7.0 · updated 2026-09-15
 
 - `Npgsql` 10.0.3 — PostgreSQL driver; used only with this product's isolated
   Tournament database.

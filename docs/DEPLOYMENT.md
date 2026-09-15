@@ -47,5 +47,5 @@ must remain unavailable there until the separate Account handoff is approved
 and configured. The reverse proxy must preserve the original HTTPS scheme and
 host so one-time live addresses and QR codes use the public origin. No Sandbox,
 DNS, Caddy route, secret, or Production deployment is approved for version
-0.6.0. DNS has not been updated for Tournament. Follow
+0.7.0. DNS has not been updated for Tournament. Follow
 `LAUNCH_CHECKLIST.md`; passing code checks does not authorize deployment.

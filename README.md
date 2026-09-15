@@ -36,10 +36,12 @@ rotated or revoked, and end automatically on archival. Swiss
 and group-to-finals remain modeled roadmap formats; the application refuses to
 generate them rather than producing an incorrect schedule.
 
-Version 0.6.0 also adds the Tournament side of irreversible player-data opt-out.
+Version 0.6.0 adds the Tournament side of irreversible player-data opt-out.
 When a linked Account identity is removed, retained brackets and results keep
 working under a random installation-local “Deleted player …” label and no
-reverse mapping remains. Live signed delivery from Account is not activated yet.
+reverse mapping remains. Version 0.7.0 adds a disabled-by-default receiver that
+verifies short-lived Account signatures, exact purpose/audience/installation,
+and replay tokens. Live Account dispatch and receiver activation remain gated.
 
 Start with `docs/OPERATIONS.md` for the tournament-day workflow and
 `docs/LAUNCH_CHECKLIST.md` for the remaining environment decisions and launch

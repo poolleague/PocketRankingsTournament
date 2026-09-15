@@ -431,9 +431,10 @@ public sealed partial class PostgresTournamentStore : ITournamentStore
             suppression.Parameters.AddWithValue("request", directive.RequestId);
             await suppression.ExecuteNonQueryAsync(cancellationToken);
         }
-        await using (var receipt = new NpgsqlCommand("INSERT INTO privacy.anonymization_receipts(request_id,participants_anonymized) VALUES (@request,@count)", connection, transaction))
+        await using (var receipt = new NpgsqlCommand("INSERT INTO privacy.anonymization_receipts(request_id,token_id,participants_anonymized) VALUES (@request,@token,@count)", connection, transaction))
         {
             receipt.Parameters.AddWithValue("request", directive.RequestId);
+            receipt.Parameters.AddWithValue("token", directive.TokenId);
             receipt.Parameters.AddWithValue("count", participants.Count);
             await receipt.ExecuteNonQueryAsync(cancellationToken);
         }

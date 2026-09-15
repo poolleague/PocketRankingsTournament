@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0 — Unreleased
+
+- Added a disabled-by-default internal receiver for Account-signed player anonymization directives.
+- Enforced RS256 signature, key ID, issuer, Tournament audience, purpose, installation, issuance, two-minute expiry, and unique token ID before exposing identity to the anonymization store.
+- Added replay-resistant receipt schema and security-negative verification tests.
+- Kept live Account dispatch, acknowledgements, League changes, DNS, deployment, tags, and releases out of scope.
+
 ## 0.6.0 — Unreleased
 
 - Added transactional anonymization of Account-linked participants while preserving historical brackets, results, standings, placements, and payouts.

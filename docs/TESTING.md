@@ -7,7 +7,7 @@ dotnet build PocketRankingsTournament.slnx -c Release
 dotnet test PocketRankingsTournament.slnx -c Release --no-build
 ```
 
-The 60-test-case suite covers bracket validation, balanced seeding, propagated
+The 62-test-case suite covers bracket validation, balanced seeding, propagated
 odd-field byes, winner
 and loser routing, final/reset shape, unsupported-format refusal, directory
 classification, readable labels, the role matrix, fail-closed entitlement
@@ -25,14 +25,14 @@ formula-safe exports, explicit forfeit winners, derived completed placements,
 and exact event/match assignment behavior, temporary live-code generation and
 hashing, one-time disclosure, anonymous private-event viewing, rotation,
 revocation, archival shutdown, malformed-code refusal, local QR rendering, and
-the PostgreSQL live-link constraint contract. Version 0.6.0 additionally covers random readable deleted-player labels, idempotent privacy delivery, and anonymization schema safeguards.
+the PostgreSQL live-link constraint contract. Version 0.6.0 additionally covers random readable deleted-player labels, idempotent privacy delivery, and anonymization schema safeguards. Version 0.7.0 verifies a valid signed directive and refuses disabled-receiver, wrong-audience, wrong-installation, and expired-token attempts.
 
 Runtime checks must additionally verify anonymous organizer denial, Owner and
 Tournament Director mutation access, Scorekeeper mutation denial, CSRF failure,
 private-draft non-disclosure, a complete draft-to-archive history flow, and
 desktop/390px layouts, Help, print styling, and CSV downloads. Docker validation
 must apply all six PostgreSQL migrations
-twice, verify constraints/triggers/indexes, call `/health`, and prove database
+twice, verify constraints/triggers/indexes including unique privacy token receipts, call `/health`, and prove database
 state survives an application-container restart before deployment review.
 The operational walkthrough must create a competition, register at least four
 fictional entrants, publish a draw, record one result, confirm downstream

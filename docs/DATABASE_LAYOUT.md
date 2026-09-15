@@ -1,6 +1,6 @@
 # PostgreSQL Database Layout
 
-Version: player-data anonymization 0.6.0 · updated 2026-09-15
+Version: signed anonymization receiver 0.7.0 · updated 2026-09-15
 
 Each client installation owns one isolated Tournament database. It shares no
 credential, volume, network, or table with League, Account, Player Profile, or
@@ -66,4 +66,4 @@ separate 61-day lifecycle.
 funds, execute charges, or claim that a displayed amount was paid unless the
 operator later records `paid_at` through an approved audited workflow.
 
-Migration `006_player_data_anonymization.sql` removes an opted-out person's Account link, replaces the participant public UUID/name, updates retained entrant labels without changing bracket/result foreign keys, and redacts matching audit identity. Keyed one-way suppressions and non-identifying request receipts remain; no reverse mapping is stored. Subscription cancellation is separate: access disables immediately and platform automation must remove the isolated stack, database, and expired backups after 61 calendar days.
+Migration `006_player_data_anonymization.sql` removes an opted-out person's Account link, replaces the participant public UUID/name, updates retained entrant labels without changing bracket/result foreign keys, and redacts matching audit identity. Version 0.7.0 extends the receipt with a unique directive token ID so replay is rejected independently from request idempotency; that token ID is not a person identifier. Keyed one-way suppressions and non-identifying receipts remain; no reverse mapping is stored. Subscription cancellation is separate: access disables immediately and platform automation must remove the isolated stack, database, and expired backups after 61 calendar days.

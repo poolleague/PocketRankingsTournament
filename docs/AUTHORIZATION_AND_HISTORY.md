@@ -1,6 +1,6 @@
 # Authorization, Entitlement, And History Contract
 
-Version: Tournament 0.6.0 · 2026-09-15
+Version: Tournament 0.7.0 · 2026-09-15
 
 ## Product boundary
 

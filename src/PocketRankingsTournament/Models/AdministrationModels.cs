@@ -242,7 +242,7 @@ public sealed record OperationResult(bool Succeeded, string Message)
 }
 
 // Carries the minimum verified Account instruction needed to anonymize retained Tournament history.
-public sealed record PlayerDataAnonymizationDirective(Guid RequestId, Guid PersonId, DateTimeOffset RequestedAt);
+public sealed record PlayerDataAnonymizationDirective(Guid RequestId, Guid PersonId, Guid TokenId, DateTimeOffset RequestedAt);
 
 // Returns non-identifying completion evidence and makes repeated delivery explicitly harmless.
 public sealed record PlayerDataAnonymizationResult(Guid RequestId, bool Completed, bool Duplicate, int ParticipantsAnonymized);

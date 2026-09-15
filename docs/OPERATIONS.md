@@ -1,6 +1,6 @@
 # Tournament Operations Guide
 
-Version: 0.6.0 · updated 2026-09-15
+Version: 0.7.0 · updated 2026-09-15
 
 This guide is for volunteer directors running a local pool event. Tournament
 stores no participant contact information and does not require a League,

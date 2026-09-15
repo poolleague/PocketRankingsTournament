@@ -20,7 +20,7 @@ public sealed class PlayerDataAnonymizationTests
     public async Task DevelopmentDeliveryIsIdempotentWithoutInventingIdentityLinks()
     {
         var store = new DevelopmentTournamentStore(new BracketBuilder());
-        var directive = new PocketRankingsTournament.Models.PlayerDataAnonymizationDirective(Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow);
+        var directive = new PocketRankingsTournament.Models.PlayerDataAnonymizationDirective(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow);
         Assert.False((await store.AnonymizePlayerDataAsync(directive)).Duplicate);
         Assert.True((await store.AnonymizePlayerDataAsync(directive)).Duplicate);
     }
