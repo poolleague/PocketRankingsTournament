@@ -25,6 +25,10 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ASPNETCORE_ENVIRONMENT: ${TOURNAMENT_ENVIRONMENT:-Production}
       ConnectionStrings__TournamentDatabase: Host=tournament-db;Port=5432;Database=${TOURNAMENT_DB_NAME:-pocketrankings_tournament};Username=${TOURNAMENT_DB_USER:-tournament_app};Password=${TOURNAMENT_DB_PASSWORD}
+      Privacy__SuppressionHashKey: ${TOURNAMENT_PRIVACY_SUPPRESSION_KEY:?Set TOURNAMENT_PRIVACY_SUPPRESSION_KEY}
+      PrivacyReceiver__Enabled: ${TOURNAMENT_PRIVACY_RECEIVER_ENABLED:-false}
+      Installation__Key: ${TOURNAMENT_INSTALLATION_KEY:-}
+      AccountIdentity__PublicKeyPem: ${TOURNAMENT_ACCOUNT_PUBLIC_KEY_PEM:-}
     ports:
       - "127.0.0.1:${TOURNAMENT_HTTP_PORT:-5180}:8080"
     restart: unless-stopped

@@ -36,4 +36,5 @@ jobs:
       - name: Validate isolated Compose configuration
         env:
           TOURNAMENT_DB_PASSWORD: deterministic-ci-placeholder-not-a-secret
+          TOURNAMENT_PRIVACY_SUPPRESSION_KEY: deterministic-ci-privacy-key-not-a-secret
         run: docker compose config --quiet

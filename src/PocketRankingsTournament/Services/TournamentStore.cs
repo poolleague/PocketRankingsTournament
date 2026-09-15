@@ -52,6 +52,8 @@ public interface ITournamentStore
     Task<OperationResult> CompleteCompetitionAsync(CompleteCompetitionInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     // Creates or corrects an informational payout row before the draw is published.
     Task<OperationResult> UpsertPayoutDisplayAsync(UpsertPayoutDisplayInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    // Replaces a linked player with an installation-local anonymous identity without breaking brackets or results.
+    Task<PlayerDataAnonymizationResult> AnonymizePlayerDataAsync(PlayerDataAnonymizationDirective directive, CancellationToken cancellationToken = default);
 }
 
 public static class TournamentLifecycle
@@ -120,6 +122,7 @@ public sealed partial class DevelopmentTournamentStore : ITournamentStore
     private readonly Dictionary<Guid, List<TournamentTable>> _tables = new();
     private readonly Dictionary<Guid, (LiveTournamentLink Link, byte[] Hash)> _liveLinks = new();
     private readonly HashSet<string> _issuedLiveLinkHashes = new(StringComparer.Ordinal);
+    private readonly HashSet<Guid> _privacyRequests = [];
     private readonly BracketBuilder _bracketBuilder;
 
     // Provides fictional local state only when no PostgreSQL connection exists; Production never registers this store.
@@ -343,16 +346,100 @@ public sealed partial class DevelopmentTournamentStore : ITournamentStore
 
     private static string ActorName(ClaimsPrincipal actor) => actor.Identity?.Name ?? "Unknown organizer";
     private static string ActorRole(ClaimsPrincipal actor) => actor.FindFirstValue(ClaimTypes.Role) ?? "unknown";
+
+    // Development has no Account links; it still models idempotent delivery without inventing cross-product identity.
+    public Task<PlayerDataAnonymizationResult> AnonymizePlayerDataAsync(PlayerDataAnonymizationDirective directive, CancellationToken cancellationToken = default)
+    {
+        lock (_sync)
+        {
+            var duplicate = !_privacyRequests.Add(directive.RequestId);
+            return Task.FromResult(new PlayerDataAnonymizationResult(directive.RequestId, true, duplicate, 0));
+        }
+    }
 }
 
 public sealed partial class PostgresTournamentStore : ITournamentStore
 {
     private readonly NpgsqlDataSource _dataSource;
+    private readonly TournamentPrivacy _privacy;
 
     // Keeps all durable Tournament reads and mutations inside this product's isolated PostgreSQL database.
-    public PostgresTournamentStore(NpgsqlDataSource dataSource)
+    public PostgresTournamentStore(NpgsqlDataSource dataSource, TournamentPrivacy privacy)
     {
         _dataSource = dataSource;
+        _privacy = privacy;
+    }
+
+    // Anonymizes every linked local participant in one transaction while preserving all competitive foreign keys.
+    public async Task<PlayerDataAnonymizationResult> AnonymizePlayerDataAsync(PlayerDataAnonymizationDirective directive, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var prior = new NpgsqlCommand("SELECT participants_anonymized FROM privacy.anonymization_receipts WHERE request_id=@request", connection, transaction))
+        {
+            prior.Parameters.AddWithValue("request", directive.RequestId);
+            if (await prior.ExecuteScalarAsync(cancellationToken) is int priorCount)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return new(directive.RequestId, true, true, priorCount);
+            }
+        }
+
+        var participants = new List<(long Id, string Name)>();
+        await using (var find = new NpgsqlCommand("SELECT p.participant_id,p.display_name FROM tourn.participants p JOIN integ.person_links l ON l.participant_id=p.participant_id WHERE l.person_uuid=@person FOR UPDATE", connection, transaction))
+        {
+            find.Parameters.AddWithValue("person", directive.PersonId);
+            await using var reader = await find.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken)) participants.Add((reader.GetInt64(0), reader.GetString(1)));
+        }
+
+        await using (var allowAuditRedaction = new NpgsqlCommand("SELECT set_config('pocketrankings.privacy_anonymization','on',true)", connection, transaction))
+            await allowAuditRedaction.ExecuteNonQueryAsync(cancellationToken);
+        foreach (var participant in participants)
+        {
+            var label = _privacy.CreateAnonymousLabel();
+            await using (var participantUpdate = new NpgsqlCommand("UPDATE tourn.participants SET public_uuid=@surrogate,display_name=@label,is_active=false WHERE participant_id=@participant", connection, transaction))
+            {
+                participantUpdate.Parameters.AddWithValue("surrogate", Guid.NewGuid());
+                participantUpdate.Parameters.AddWithValue("label", label);
+                participantUpdate.Parameters.AddWithValue("participant", participant.Id);
+                await participantUpdate.ExecuteNonQueryAsync(cancellationToken);
+            }
+            await using (var entrantUpdate = new NpgsqlCommand("UPDATE tourn.entrants e SET display_name=CASE WHEN (SELECT count(*) FROM tourn.entrant_members members WHERE members.entrant_id=e.entrant_id)=1 THEN @label ELSE 'Team with ' || @label END WHERE EXISTS (SELECT 1 FROM tourn.entrant_members member WHERE member.entrant_id=e.entrant_id AND member.participant_id=@participant)", connection, transaction))
+            {
+                entrantUpdate.Parameters.AddWithValue("label", label);
+                entrantUpdate.Parameters.AddWithValue("participant", participant.Id);
+                await entrantUpdate.ExecuteNonQueryAsync(cancellationToken);
+            }
+            await using (var redactAudit = new NpgsqlCommand("UPDATE audit.entries SET actor_person_uuid=CASE WHEN actor_person_uuid=@person THEN NULL ELSE actor_person_uuid END, actor_display_name=replace(COALESCE(actor_display_name,''),@old,@label), reason=replace(COALESCE(reason,''),@old,@label), before_json=CASE WHEN before_json IS NULL THEN NULL ELSE replace(replace(before_json::text,@old,@label),@person_text,@label)::jsonb END, after_json=CASE WHEN after_json IS NULL THEN NULL ELSE replace(replace(after_json::text,@old,@label),@person_text,@label)::jsonb END WHERE actor_person_uuid=@person OR actor_display_name LIKE '%' || @old || '%' OR reason LIKE '%' || @old || '%' OR before_json::text LIKE '%' || @old || '%' OR after_json::text LIKE '%' || @old || '%'", connection, transaction))
+            {
+                redactAudit.Parameters.AddWithValue("person", directive.PersonId);
+                redactAudit.Parameters.AddWithValue("person_text", directive.PersonId.ToString());
+                redactAudit.Parameters.AddWithValue("old", participant.Name);
+                redactAudit.Parameters.AddWithValue("label", label);
+                await redactAudit.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        await using (var unlink = new NpgsqlCommand("DELETE FROM integ.person_links WHERE person_uuid=@person", connection, transaction))
+        {
+            unlink.Parameters.AddWithValue("person", directive.PersonId);
+            await unlink.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await using (var suppression = new NpgsqlCommand("INSERT INTO privacy.identity_suppressions(suppression_hash,first_request_id) VALUES (@hash,@request) ON CONFLICT (suppression_hash) DO NOTHING", connection, transaction))
+        {
+            suppression.Parameters.AddWithValue("hash", _privacy.Hash(directive.PersonId));
+            suppression.Parameters.AddWithValue("request", directive.RequestId);
+            await suppression.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await using (var receipt = new NpgsqlCommand("INSERT INTO privacy.anonymization_receipts(request_id,token_id,participants_anonymized) VALUES (@request,@token,@count)", connection, transaction))
+        {
+            receipt.Parameters.AddWithValue("request", directive.RequestId);
+            receipt.Parameters.AddWithValue("token", directive.TokenId);
+            receipt.Parameters.AddWithValue("count", participants.Count);
+            await receipt.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return new(directive.RequestId, true, false, participants.Count);
     }
 
     // Filters public status from the full durable inventory rather than maintaining a separate public database.

@@ -1,6 +1,6 @@
 # Tournament Launch Checklist
 
-Version: 0.5.0 candidate · updated 2026-09-14
+Version: 0.7.0 candidate · updated 2026-09-15
 
 Passing this checklist provides evidence for an owner launch decision. It does
 not itself authorize DNS, secrets, Sandbox, Production, tags, or a public
@@ -11,6 +11,9 @@ GitHub Release.
 - [ ] Approve the durable Account token contract: issuer, Tournament audience,
   installation binding, signing-key storage and rotation, expiry, replay,
   outage behavior, and revocation.
+- [x] Implement the disabled-by-default signed receiver and replay-resistant receipt contract.
+- [ ] Approve the exact private receiver destination and explicitly activate it with controlled key distribution.
+- [ ] Implement and validate Account acknowledgement persistence, retries/dead-letter handling, and operational alerts.
 - [ ] Approve the exact Tournament entitlement claim/check contract and cache
   behavior. Beta inclusion remains Account-owned; Tournament performs no
   checkout or subscription charging.
@@ -28,7 +31,7 @@ GitHub Release.
   tests; the dependency advisory scan reports no vulnerable packages.
 - [ ] Compose configuration resolves with a process-only fictional validation
   password and exposes PostgreSQL on no host port.
-- [ ] All migrations `001` through `005` apply twice to a fresh isolated
+- [ ] All migrations `001` through `006` apply twice to a fresh isolated
   PostgreSQL container and the migration ledger contains each exactly once.
 - [ ] Create a Tournament record, restart only the app container, and confirm
   event, draw, result revisions, status history, payouts, and audit evidence

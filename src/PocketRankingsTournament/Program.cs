@@ -44,6 +44,16 @@ public class Program
         builder.Services.AddAuthorization(options => TournamentAuthorization.Configure(options));
         builder.Services.AddSingleton<BracketBuilder>();
         builder.Services.AddSingleton<LiveLinkRevealStore>();
+        var privacyKey = builder.Configuration["Privacy:SuppressionHashKey"];
+        var accountPublicKey = builder.Configuration["AccountIdentity:PublicKeyPem"];
+        var installationKey = builder.Configuration["Installation:Key"];
+        var privacyReceiverEnabled = builder.Configuration.GetValue<bool>("PrivacyReceiver:Enabled");
+        if (!builder.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(privacyKey))
+            throw new InvalidOperationException("Privacy:SuppressionHashKey is required outside Development.");
+        if (privacyReceiverEnabled && (string.IsNullOrWhiteSpace(accountPublicKey) || string.IsNullOrWhiteSpace(installationKey)))
+            throw new InvalidOperationException("AccountIdentity:PublicKeyPem and Installation:Key are required when the privacy receiver is enabled.");
+        builder.Services.AddSingleton(new TournamentPrivacy(privacyKey ?? "development-only-tournament-privacy-key"));
+        builder.Services.AddSingleton<PrivacyDirectiveVerifier>();
         builder.Services.AddHealthChecks();
 
         var connectionString = builder.Configuration.GetConnectionString("TournamentDatabase");

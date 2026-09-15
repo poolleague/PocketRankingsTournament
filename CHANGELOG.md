@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.0 — Unreleased
+
+- Added a disabled-by-default internal receiver for Account-signed player anonymization directives.
+- Enforced RS256 signature, key ID, issuer, Tournament audience, purpose, installation, issuance, two-minute expiry, and unique token ID before exposing identity to the anonymization store.
+- Added replay-resistant receipt schema and security-negative verification tests.
+- Kept live Account dispatch, acknowledgements, League changes, DNS, deployment, tags, and releases out of scope.
+
+## 0.6.0 — Unreleased
+
+- Added transactional anonymization of Account-linked participants while preserving historical brackets, results, standings, placements, and payouts.
+- Added random installation-local deleted-player labels, replacement public participant UUIDs, removal of Account links, and redaction of matching audit identity.
+- Added keyed one-way future-link suppressions and non-identifying append-only request receipts.
+- Added migration `006_player_data_anonymization.sql`, focused tests, configuration, and lifecycle/restore documentation.
+- Live signed Account delivery, acknowledgements, League changes, DNS, deployment, tags, and releases remain excluded.
+
 ## 0.5.0 — Unreleased
 
 - Added auditable temporary Live Tournament Links with cryptographically random

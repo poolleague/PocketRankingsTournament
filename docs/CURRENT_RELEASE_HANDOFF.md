@@ -1,11 +1,11 @@
 # Current Release Handoff
 
-Last verified: 2026-09-14 (America/New_York)
+Last verified: 2026-09-15 (America/New_York)
 
 ## Active foundation
 
 - Repository: `poolleague/PocketRankingsTournament`
-- Branch: `codex/tournament-foundation`
+- Branch: `codex/player-data-privacy`
 - Competition-operations phase baseline: `e5907b8`
 - Launch-readiness phase baseline: `13a42d0`
 - Live-link phase baseline: `c722300`
@@ -78,11 +78,13 @@ Last verified: 2026-09-14 (America/New_York)
   locally without disclosing the address to a third-party service.
 - Additive migration `005_live_tournament_links.sql` retains safe link metadata
   and enforces unique hashes plus one non-revoked link per event.
+- Version 0.6.0 adds Account-directed, transactionally idempotent participant anonymization. Brackets and results remain intact under random installation-local deleted-player identities; Account links and reverse mappings are removed. Migration `006_player_data_anonymization.sql` adds keyed suppressions and non-identifying receipts.
+- Version 0.7.0 adds the disabled-by-default signed receiver, exact audience/installation/time verification, and unique token receipts. Live Account dispatch, acknowledgement persistence, retries, alerts, and explicit activation remain deferred.
 
 ## Current validation
 
 - Release build: PASS, zero warnings/errors.
-- Automated tests: PASS, 57/57.
+- Focused automated tests: PASS, 62/62 using a separate output path so the local preview remained untouched.
 - Version 0.5.0 browser: activation reveals one copyable address and local QR,
   refresh removes the full code, anonymous viewing after sign-out PASS, 390px
   live/organizer layouts fit without document overflow, manual deactivation
