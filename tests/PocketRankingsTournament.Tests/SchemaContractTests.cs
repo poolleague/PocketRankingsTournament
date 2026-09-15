@@ -3,6 +3,15 @@ namespace PocketRankingsTournament.Tests;
 public sealed class SchemaContractTests
 {
     [Fact]
+    public void PrivacyMigrationKeepsHistoryWithoutRawAccountIdentity()
+    {
+        var sql = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Database", "006_player_data_anonymization.sql"));
+        Assert.Contains("privacy.identity_suppressions", sql, StringComparison.Ordinal);
+        Assert.Contains("privacy.anonymization_receipts", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("person_uuid", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("append-only", sql, StringComparison.OrdinalIgnoreCase);
+    }
+    [Fact]
     public void InitialSchemaIsTransactionalIdempotentAndProductLocal()
     {
         var sql = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Database", "001_initial_schema.sql"));

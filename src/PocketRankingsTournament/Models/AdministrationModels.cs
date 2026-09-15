@@ -241,6 +241,12 @@ public sealed record OperationResult(bool Succeeded, string Message)
     public static OperationResult Failure(string message) => new(false, message);
 }
 
+// Carries the minimum verified Account instruction needed to anonymize retained Tournament history.
+public sealed record PlayerDataAnonymizationDirective(Guid RequestId, Guid PersonId, DateTimeOffset RequestedAt);
+
+// Returns non-identifying completion evidence and makes repeated delivery explicitly harmless.
+public sealed record PlayerDataAnonymizationResult(Guid RequestId, bool Completed, bool Duplicate, int ParticipantsAnonymized);
+
 // Requires an explicit reason whenever a tournament crosses a public or historical boundary.
 public sealed class TransitionTournamentInput
 {

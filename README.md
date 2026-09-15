@@ -18,7 +18,7 @@ Matches `PoolLeagueWeb`'s layout: the actual project lives under
 The application now includes a public tournament surface plus Tournament-local
 administration, retained history, competition setup, entrant registration,
 versioned draw publication, score entry, and bracket advancement on
-`codex/tournament-foundation`.
+`codex/player-data-privacy`.
 Development provides fictional Owner, Tournament Director, and Scorekeeper
 identities for permission testing. Production administration deliberately fails
 closed until the separate Account identity handoff receives approval; this repo
@@ -35,6 +35,11 @@ Only a one-way hash of each short code is retained; links expire, can be
 rotated or revoked, and end automatically on archival. Swiss
 and group-to-finals remain modeled roadmap formats; the application refuses to
 generate them rather than producing an incorrect schedule.
+
+Version 0.6.0 also adds the Tournament side of irreversible player-data opt-out.
+When a linked Account identity is removed, retained brackets and results keep
+working under a random installation-local “Deleted player …” label and no
+reverse mapping remains. Live signed delivery from Account is not activated yet.
 
 Start with `docs/OPERATIONS.md` for the tournament-day workflow and
 `docs/LAUNCH_CHECKLIST.md` for the remaining environment decisions and launch

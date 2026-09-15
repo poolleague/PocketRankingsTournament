@@ -1,6 +1,6 @@
 # Authorization, Entitlement, And History Contract
 
-Version: Tournament 0.5.0 · 2026-09-14
+Version: Tournament 0.6.0 · 2026-09-15
 
 ## Product boundary
 
@@ -101,13 +101,13 @@ retain the temporary view after expiry or revocation.
   unaffected opponents remain in place, and stale score forms are invalidated.
 - Authenticated mutations append redacted `audit.entries` evidence. A database
   trigger rejects update or delete of audit rows.
-- Version 0.5.0 performs no automatic history purge. A later approved privacy
-  phase may unlink or anonymize identity while preserving the factual event,
-  bracket, score, and placement record.
+- Version 0.6.0 performs no automatic customer-history purge. Player opt-out now
+  anonymizes linked participant identity while retaining competition history; customer
+  cancellation follows the separate 61-day platform lifecycle.
 
-This is an operational design, not a legal retention commitment. Any fixed
-retention period, customer export/deletion promise, or jurisdiction-specific
-privacy policy requires a separately approved legal/product decision.
+This is an operational design, not legal advice. The 61-day product lifecycle is
+owner-approved; customer notices and jurisdiction-specific obligations still require
+formal legal/privacy review before launch.
 
 ## Recovery
 

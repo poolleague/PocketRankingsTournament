@@ -35,3 +35,7 @@ Tournament. The owner approved the shared rules on 2026-09-13.
 The owner approved the governance sync and initial Tournament foundation on
 2026-09-13. `docs/CURRENT_RELEASE_HANDOFF.md` is the changing-state source for
 the active branch, implementation, validation, and remaining decisions.
+
+## Player data privacy
+
+An authenticated Account opt-out preserves brackets, scores, standings, placements, and payouts but removes the `PersonId` link and replaces the local participant public identity/name with an installation-local random surrogate such as `Deleted player A7K4`. No reverse mapping may remain. Retain only a keyed one-way suppression and non-identifying request receipt. Restored backups must replay completed directives before access resumes. Live signed Account delivery is not active; do not represent the store operation alone as a completed Account request.

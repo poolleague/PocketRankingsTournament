@@ -1,6 +1,6 @@
 # PostgreSQL Database Layout
 
-Version: live display links 0.5.0 · updated 2026-09-14
+Version: player-data anonymization 0.6.0 · updated 2026-09-15
 
 Each client installation owns one isolated Tournament database. It shares no
 credential, volume, network, or table with League, Account, Player Profile, or
@@ -12,6 +12,7 @@ another Tournament client.
 | `tourn` | Venues/tables, events, competitions, local participants, entrants, stages, matches, placements, displayed payouts, and temporary live-link hashes |
 | `integ` | Optional Account-owned `PersonId` links and one-way-hashed handoff-consumption evidence; no contacts or credentials |
 | `audit` | Append-only redacted mutation evidence protected from update/delete by a database trigger |
+| `privacy` | Keyed identity suppressions and non-identifying append-only anonymization receipts |
 
 The canonical idempotent contracts are the ordered SQL files under
 `src/PocketRankingsTournament/Database/`. Internal
@@ -57,9 +58,12 @@ handoff reveals and renders them only on the immediate organizer response.
 
 Published tournaments are completed and then archived rather than deleted.
 Draw and result corrections append revisions with actor/reason evidence. There
-is no automatic history purge in version 0.5.0; a later privacy-retention policy
-may unlink or anonymize identity without erasing competitive results.
+is no automatic customer-history purge in version 0.6.0. Player opt-out anonymizes
+identity without erasing competitive results; subscription cancellation follows the
+separate 61-day lifecycle.
 
 `payout_displays` is informational bookkeeping. The foundation does not hold
 funds, execute charges, or claim that a displayed amount was paid unless the
 operator later records `paid_at` through an approved audited workflow.
+
+Migration `006_player_data_anonymization.sql` removes an opted-out person's Account link, replaces the participant public UUID/name, updates retained entrant labels without changing bracket/result foreign keys, and redacts matching audit identity. Keyed one-way suppressions and non-identifying request receipts remain; no reverse mapping is stored. Subscription cancellation is separate: access disables immediately and platform automation must remove the isolated stack, database, and expired backups after 61 calendar days.

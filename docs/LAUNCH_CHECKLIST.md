@@ -1,6 +1,6 @@
 # Tournament Launch Checklist
 
-Version: 0.5.0 candidate · updated 2026-09-14
+Version: 0.6.0 candidate · updated 2026-09-15
 
 Passing this checklist provides evidence for an owner launch decision. It does
 not itself authorize DNS, secrets, Sandbox, Production, tags, or a public
